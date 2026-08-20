@@ -189,12 +189,150 @@ api.get("/stock", (_req, res) => {
 });
 
 api.get("/daily", (req, res) => {
-  const date = String(req.query.date || pkDate());
-  const entries = all(
-    `SELECT * FROM entry WHERE is_void = 0 AND date = ? ORDER BY id DESC`,
-    [date]
+  const validDate = (value: unknown, fallback: string) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : fallback;
+  const from = validDate(req.query.from || req.query.date, pkDate());
+  const to = validDate(req.query.to || req.query.date, from);
+  const show = ["active", "void", "all"].includes(String(req.query.show)) ? String(req.query.show) : "active";
+  const lower = (value: unknown) => String(value || "").trim().toLocaleLowerCase();
+  const matches = (actual: unknown, wanted: unknown) => !lower(wanted) || lower(wanted) === "all" || lower(actual).includes(lower(wanted));
+
+  const materialCategoryByName = new Map(
+    all<{ name: string; category: string }>(
+      `SELECT m.name, COALESCE(c.name, 'General') AS category
+         FROM material m LEFT JOIN material_category c ON c.id = m.category_id`
+    ).map((row) => [lower(row.name), row.category])
   );
-  res.json({ date, entries });
+
+  let rows: AnyRow[] = all<AnyRow>(
+    `SELECT * FROM entry WHERE date >= ? AND date <= ? ORDER BY date DESC, time DESC, id DESC`,
+    [from, to]
+  ).map((entry) => ({
+    ...entry,
+    kind: "entry",
+    row_key: `entry-${entry.id}`,
+    date_posted: entry.date,
+    material_category: materialCategoryByName.get(lower(entry.material)) || "General",
+    amount: null
+  }));
+
+  const payments = all<AnyRow>(
+    `SELECT p.*, c.code AS resolved_client_code, c.category AS resolved_client_category
+       FROM payment p LEFT JOIN client c ON c.id = p.client_id
+      WHERE date(p.date_posted) >= date(?) AND date(p.date_posted) <= date(?)
+      ORDER BY p.date_posted DESC, p.id DESC`,
+    [from, to]
+  ).map((payment) => {
+    const stamp = String(payment.date_posted || "");
+    return {
+      ...payment,
+      kind: "payment",
+      row_key: `payment-${payment.id}`,
+      date: stamp.slice(0, 10),
+      time: stamp.includes("T") ? stamp.slice(11, 19) : (stamp.includes(" ") ? stamp.slice(11, 19) : ""),
+      type: "PAYMENT",
+      material: "",
+      client: payment.client_name,
+      client_code: payment.resolved_client_code || "",
+      client_category: payment.resolved_client_category || "",
+      transaction_category: "Payment",
+      transaction_type: "Payment",
+      bill_no: payment.manual_bill_no || payment.auto_bill_no,
+      nimbus_no: payment.auto_bill_no,
+      qty: null,
+      source_table: "payment",
+      source_id: payment.id
+    };
+  });
+  rows.push(...payments);
+
+  const clientCategory = req.query.client_category;
+  const transactionCategory = req.query.transaction_category;
+  const materialCategory = req.query.material_category;
+  const material = req.query.material;
+  const client = req.query.client;
+  const bill = req.query.bill;
+
+  rows = rows.filter((row) => {
+    const isVoid = Boolean(row.is_void);
+    if (show === "active" && isVoid) return false;
+    if (show === "void" && !isVoid) return false;
+    if (!matches(row.client_category, clientCategory)) return false;
+    if (!matches(row.transaction_category || row.transaction_type, transactionCategory)) return false;
+    if (lower(materialCategory) && lower(materialCategory) !== "all" && row.kind === "payment") return false;
+    if (!matches(row.material_category, materialCategory)) return false;
+    if (lower(material) && lower(material) !== "all" && row.kind === "payment") return false;
+    if (!matches(row.material, material)) return false;
+    if (!matches(`${row.client || ""} ${row.client_code || ""}`, client)) return false;
+    if (!matches(`${row.bill_no || ""} ${row.auto_bill_no || ""} ${row.nimbus_no || ""}`, bill)) return false;
+    return true;
+  });
+
+  rows.sort((a, b) => `${b.date || ""} ${b.time || ""} ${String(b.id).padStart(12, "0")}`.localeCompare(`${a.date || ""} ${a.time || ""} ${String(a.id).padStart(12, "0")}`));
+
+  const stockIn = rows.filter((r) => r.kind === "entry" && !r.is_void && r.type === "IN").reduce((sum, r) => sum + Number(r.qty || 0), 0);
+  const stockOut = rows.filter((r) => r.kind === "entry" && !r.is_void && r.type === "OUT").reduce((sum, r) => sum + Number(r.qty || 0), 0);
+  const paymentTotal = rows.filter((r) => r.kind === "payment" && !r.is_void).reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const pageSize = Math.min(100, Math.max(5, Number(req.query.page_size || 25)));
+  const total = rows.length;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(pages, Math.max(1, Number(req.query.page || 1)));
+  const start = (page - 1) * pageSize;
+
+  res.json({
+    from,
+    to,
+    rows: rows.slice(start, start + pageSize),
+    summary: { stockIn, stockOut, payments: paymentTotal, netQty: stockIn - stockOut },
+    pagination: { page, pageSize, total, pages },
+    options: {
+      clients: all("SELECT id, code, name, category FROM client WHERE is_active = 1 ORDER BY name"),
+      materials: all("SELECT id, code, name FROM material WHERE is_active = 1 ORDER BY name"),
+      clientCategories: all<{ category: string }>("SELECT DISTINCT category FROM client WHERE category IS NOT NULL AND trim(category) != '' ORDER BY category").map((r) => r.category),
+      transactionCategories: all<{ category: string }>("SELECT DISTINCT COALESCE(transaction_category, transaction_type) AS category FROM entry WHERE COALESCE(transaction_category, transaction_type) IS NOT NULL ORDER BY category").map((r) => r.category),
+      materialCategories: all<{ name: string }>("SELECT name FROM material_category WHERE is_active = 1 ORDER BY name").map((r) => r.name)
+    }
+  });
+});
+
+api.post("/daily/transactions/:kind/:id/void", (req, res) => {
+  const kind = String(req.params.kind);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid transaction id" });
+
+  if (kind === "payment") {
+    const payment = one<AnyRow>("SELECT * FROM payment WHERE id = ?", [id]);
+    if (!payment) return res.status(404).json({ error: "Payment not found" });
+    if (payment.is_void) return res.json({ ok: true });
+    tx(() => {
+      run("UPDATE payment SET is_void = 1, updated_by = ?, updated_at = ? WHERE id = ?", [actor(req), pkNow(), id]);
+      run("UPDATE account_transaction SET is_void = 1 WHERE source_type IN ('Payment','payment') AND source_id = ?", [id]);
+      if (payment.payment_account_id) refreshAccountBalance(Number(payment.payment_account_id));
+    });
+    return res.json({ ok: true });
+  }
+
+  if (kind !== "entry") return res.status(400).json({ error: "Unsupported transaction type" });
+  const entry = one<AnyRow>("SELECT * FROM entry WHERE id = ?", [id]);
+  if (!entry) return res.status(404).json({ error: "Entry not found" });
+  const sourceTable = String(entry.source_table || "").toLowerCase();
+  const sourceId = Number(entry.source_id || 0);
+  tx(() => {
+    if (sourceId && sourceTable === "direct_sale") {
+      run("UPDATE direct_sale SET is_void = 1 WHERE id = ?", [sourceId]);
+      run("UPDATE entry SET is_void = 1 WHERE source_table = 'direct_sale' AND source_id = ?", [sourceId]);
+      run("UPDATE delivery_rent SET is_void = 1 WHERE sale_id = ?", [sourceId]);
+      run("UPDATE sale_delivery_persons SET is_void = 1 WHERE sale_id = ?", [sourceId]);
+    } else if (sourceId && sourceTable === "grn") {
+      run("UPDATE grn SET is_void = 1, updated_at = ? WHERE id = ?", [pkNow(), sourceId]);
+      run("UPDATE entry SET is_void = 1 WHERE source_table = 'grn' AND source_id = ?", [sourceId]);
+    } else if (sourceId && sourceTable === "material_return") {
+      run("UPDATE material_return SET is_void = 1 WHERE id = ?", [sourceId]);
+      run("UPDATE entry SET is_void = 1 WHERE source_table = 'material_return' AND source_id = ?", [sourceId]);
+    } else {
+      run("UPDATE entry SET is_void = 1 WHERE id = ?", [id]);
+    }
+  });
+  res.json({ ok: true });
 });
 
 /* ---------------- clients ---------------- */

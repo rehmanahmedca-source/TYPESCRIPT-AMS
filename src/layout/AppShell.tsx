@@ -54,6 +54,7 @@ export default function AppShell({
     try {
       await api("/auth/logout", { method: "POST" });
     } finally {
+      try { sessionStorage.setItem("ams_logged_out", "1"); } catch { /* storage may be disabled */ }
       window.dispatchEvent(new CustomEvent("ams:unauthorized"));
     }
   }
@@ -76,7 +77,10 @@ export default function AppShell({
         <div className="sidebar-header">
           <NavLink to="/" className="sidebar-brand">
             <i className="bi bi-box-seam-fill text-warning" />
-            <span>AMS ERP</span>
+            <span className="d-flex flex-column lh-sm">
+              <span>AMS SYSTEM</span>
+              <small className="sidebar-brand-subtitle">FOR EASE</small>
+            </span>
           </NavLink>
           <button className="btn btn-sm btn-link text-muted d-lg-none p-0" onClick={() => setOpen(false)}>
             <i className="bi bi-x-lg fs-5" />

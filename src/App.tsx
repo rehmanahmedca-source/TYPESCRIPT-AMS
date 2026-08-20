@@ -42,17 +42,37 @@ export default function App() {
   const [authUser, setAuthUser] = useState<Record<string, unknown> | null | undefined>(undefined);
   const [boot, setBoot] = useState<Boot>({ today: "", user: {} });
 
-  async function loadApplication(user?: Record<string, unknown>) {
-    const me = user || (await api<{ user: Record<string, unknown> }>("/auth/me")).user;
+  async function loadApplication(user?: Record<string, unknown>, signal?: AbortSignal) {
+    const me = user || (await api<{ user: Record<string, unknown> }>("/auth/me", { signal })).user;
     setAuthUser(me);
-    setBoot(await api<Boot>("/bootstrap"));
+    setBoot(await api<Boot>("/bootstrap", { signal }));
   }
 
   useEffect(() => {
-    loadApplication().catch(() => setAuthUser(null));
+    let active = true;
+    const controller = new AbortController();
+
+    // Do not leave the user on the opening screen indefinitely if an auth
+    // request is interrupted by a proxy, stale connection, or network issue.
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      if (active) setAuthUser(null);
+    }, 4_000);
+
+    loadApplication(undefined, controller.signal)
+      .catch(() => {
+        if (active) setAuthUser(null);
+      })
+      .finally(() => window.clearTimeout(timeout));
+
     const unauthorized = () => setAuthUser(null);
     window.addEventListener("ams:unauthorized", unauthorized);
-    return () => window.removeEventListener("ams:unauthorized", unauthorized);
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearTimeout(timeout);
+      window.removeEventListener("ams:unauthorized", unauthorized);
+    };
   }, []);
 
   if (authUser === undefined) {
