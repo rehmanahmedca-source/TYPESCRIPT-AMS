@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Route, Routes } from "react-router-dom";
-import { api } from "./api";
+import { api, getAuthToken } from "./api";
 import AppShell from "./layout/AppShell";
 import Dashboard from "./pages/Dashboard";
 import Stock from "./pages/Stock";
@@ -44,13 +44,20 @@ export default function App() {
 
   async function loadApplication(user?: Record<string, unknown>, signal?: AbortSignal) {
     const me = user || (await api<{ user: Record<string, unknown> }>("/auth/me", { signal })).user;
+    const bootData = await api<Boot>("/bootstrap", { signal });
+    setBoot(bootData);
     setAuthUser(me);
-    setBoot(await api<Boot>("/bootstrap", { signal }));
   }
 
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
+
+    const token = getAuthToken();
+    if (!token && !document.cookie.includes("ams_session")) {
+      setAuthUser(null);
+      return;
+    }
 
     // Do not leave the user on the opening screen indefinitely if an auth
     // request is interrupted by a proxy, stale connection, or network issue.
@@ -79,7 +86,18 @@ export default function App() {
     return <div className="min-vh-100 d-flex align-items-center justify-content-center text-muted">Opening AMS…</div>;
   }
   if (!authUser) {
-    return <Login onLogin={(user) => loadApplication(user).catch(() => setAuthUser(null))} />;
+    return (
+      <Login
+        onLogin={async (user) => {
+          try {
+            await loadApplication(user);
+          } catch (e) {
+            console.error("Failed to load application after login:", e);
+            setAuthUser(null);
+          }
+        }}
+      />
+    );
   }
 
   return (

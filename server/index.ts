@@ -30,7 +30,7 @@ app.get("/health", (_req, res) => {
 });
 
 async function start() {
-  const isProd = process.env.NODE_ENV === "production" || fs.existsSync(path.join(root, "dist", "index.html"));
+  const isProd = process.env.NODE_ENV === "production";
   if (isProd && fs.existsSync(path.join(root, "dist", "index.html"))) {
     app.use(express.static(path.join(root, "dist")));
     app.get("*", (req, res, next) => {

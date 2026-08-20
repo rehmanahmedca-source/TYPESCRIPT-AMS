@@ -5,8 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "NODE_OPTIONS=--experimental-sqlite tsx watch server/index.ts",
+    "dev": "NODE_OPTIONS=--experimental-sqlite tsx server/index.ts",
     "build": "vite build",
+    "lint": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "NODE_OPTIONS=--experimental-sqlite tsx scripts/schema-check.ts",
     "check": "npm run typecheck && npm test && npm run build",

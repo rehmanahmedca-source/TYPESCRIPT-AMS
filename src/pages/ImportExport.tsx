@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { PageHeader, Card } from "../components/ui";
-import { downloadUrl } from "../api";
+import { api, downloadUrl } from "../api";
 
 type ReportRow = { name: string; status: string; inserted: number; updated: number; skipped: number; failed: number; error?: string };
 
@@ -15,14 +15,16 @@ export default function ImportExport() {
     setErr("");
     const fd = new FormData(e.currentTarget);
     fd.set("mode", mode);
-    const res = await fetch("/api/import", { method: "POST", body: fd });
-    const data = await res.json();
-    if (!res.ok && !data.table_results) {
-      setErr(data.error || "Import failed");
-      return;
+    try {
+      const data = await api<{ headline?: string; table_results?: ReportRow[]; error?: string }>("/import", {
+        method: "POST",
+        body: fd
+      });
+      setHeadline(data.headline || "Import finished");
+      setRows(data.table_results || []);
+    } catch (error: any) {
+      setErr(error?.message || "Import failed");
     }
-    setHeadline(data.headline || "Import finished");
-    setRows(data.table_results || []);
   }
 
   return (
