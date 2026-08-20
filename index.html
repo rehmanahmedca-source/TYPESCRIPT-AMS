@@ -12,7 +12,7 @@
       (function () {
         var saved = "";
         try { saved = localStorage.getItem("ams_theme") || ""; } catch (_) {}
-        var t = saved || "dark";
+        var t = saved || "light";
         document.documentElement.setAttribute("data-theme", t);
         document.documentElement.style.colorScheme = t;
       })();

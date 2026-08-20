@@ -93,6 +93,7 @@ const PERMISSION_BY_PREFIX: Array<[string, string]> = [
   ["/cash-flow", "can_view_cash_flow"],
   ["/reconciliation", "can_view_cash_flow"],
   ["/materials", "can_manage_materials"],
+  ["/daily", "can_view_daily"],
   ["/grn", "can_manage_grn"],
   ["/bookings", "can_manage_bookings"],
   ["/add_booking", "can_manage_bookings"],
@@ -162,9 +163,11 @@ authApi.post("/login", (req, res) => {
     [sid, user.id, user.username, user.role, req.ip, String(req.get("user-agent") || "").slice(0, 300), now, now]
   );
   const secure = process.env.SESSION_COOKIE_SECURE === "1";
-  res.cookie(SESSION_COOKIE, sid, { httpOnly: true, sameSite: "lax", secure, maxAge: SESSION_DAYS * 86400_000, path: "/" });
+  const remember = req.body?.remember_me === true || req.body?.remember_me === 1 || req.body?.remember_me === "1";
+  const persistent = remember ? { maxAge: SESSION_DAYS * 86400_000 } : {};
+  res.cookie(SESSION_COOKIE, sid, { httpOnly: true, sameSite: "lax", secure, path: "/", ...persistent });
   const csrf = csrfFor(sid);
-  res.cookie(CSRF_COOKIE, csrf, { httpOnly: false, sameSite: "lax", secure, maxAge: SESSION_DAYS * 86400_000, path: "/" });
+  res.cookie(CSRF_COOKIE, csrf, { httpOnly: false, sameSite: "lax", secure, path: "/", ...persistent });
   res.json({ ok: true, user: publicUser(user), csrf });
 });
 
