@@ -1969,7 +1969,26 @@ api.get("/accounts", (_req, res) => {
   );
   const totalCash = accounts.filter((a) => String(a.category) === "cash").reduce((s, a) => s + Number(a.live_balance), 0);
   const totalBank = accounts.filter((a) => String(a.category) === "bank").reduce((s, a) => s + Number(a.live_balance), 0);
-  res.json({ accounts, transactions: txs, totalCash, totalBank, totalCompanyMoney: totalCash + totalBank });
+  const today = pkDate();
+  const client_payments_today = Number(one<{ n: number }>(`SELECT COALESCE(SUM(amount),0) AS n FROM payment WHERE is_void = 0 AND date(date_posted) = date(?)`, [today])?.n || 0);
+  const supplier_payments_today = Number(one<{ n: number }>(`SELECT COALESCE(SUM(amount),0) AS n FROM supplier_payment WHERE is_void = 0 AND date(date_posted) = date(?)`, [today])?.n || 0);
+  const expenditures_today = Number(one<{ n: number }>(`SELECT COALESCE(SUM(amount),0) AS n FROM account_transaction WHERE is_void = 0 AND date(date_posted) = date(?) AND transaction_type IN ('Expense','Payment') AND to_account_id IS NULL`, [today])?.n || 0);
+  const receipts_today = Number(one<{ n: number }>(`SELECT COALESCE(SUM(amount),0) AS n FROM account_transaction WHERE is_void = 0 AND date(date_posted) = date(?) AND transaction_type = 'Receipt'`, [today])?.n || 0);
+  res.json({
+    accounts,
+    transactions: txs,
+    totalCash,
+    totalBank,
+    totalCompanyMoney: totalCash + totalBank,
+    client_payments_today,
+    supplier_payments_today,
+    expenditures_today,
+    receipts_today: receipts_today + client_payments_today,
+    clients: all("SELECT id, code, name FROM client WHERE is_active = 1 ORDER BY name"),
+    suppliers: all("SELECT id, name FROM supplier WHERE is_active = 1 ORDER BY name"),
+    drivers: all("SELECT id, name FROM delivery_person WHERE is_active = 1 ORDER BY name"),
+    categories: all("SELECT id, name FROM account_category ORDER BY name")
+  });
 });
 
 api.post("/accounts", (req, res) => {

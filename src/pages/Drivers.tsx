@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { Link } from "react-router-dom";
 import { PageHeader, Card, Modal } from "../components/ui";
 import { api } from "../api";
 import { money, num } from "../format";
@@ -83,7 +84,7 @@ export default function Drivers() {
 
   return (
     <div>
-      <PageHeader icon="bi-person-badge" title="Drivers & Fleet" subtitle="Manage delivery drivers, track balances, record payments">
+      <PageHeader icon="bi-person-badge" title="Delivery Persons" subtitle="Manage delivery drivers, track balances, record payments">
         <button className="btn btn-warning btn-pill fw-bold" onClick={() => setShowAdd(true)}>
           <i className="bi bi-plus-circle me-1" /> New Driver
         </button>

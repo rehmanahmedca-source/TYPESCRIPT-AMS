@@ -83,7 +83,7 @@ export default function Dashboard() {
         <Kpi to="/clients" tone="indigo" label="Registered Clients" value={num(d.clientCount)} description="Active customer base" action="Open clients" icon="bi-people" />
         <Kpi to="/financial-details" tone="green" label="Daily Cash Received" value={money(d.dailyCash)} description="Today, August data" action="See cash breakdown" icon="bi-cash-stack" />
         <Kpi to="/financial-details" tone="pink" label="Daily Due Amount" value={money(d.dailyCredit)} description="Credit posted today" action="See credit breakdown" icon="bi-receipt" />
-        <Kpi to="/clients" tone="red" label="Total Outstanding" value={money(d.totalOutstanding)} description="Across all open bills" action="Review unpaid bills" icon="bi-exclamation-circle" />
+        <Kpi to="/current_payables" tone="red" label="Total Outstanding" value={money(d.totalOutstanding)} description="Across all open bills" action="Review unpaid bills" icon="bi-exclamation-circle" />
         <Kpi to="/accounts" tone="violet" label="Accounts Hub" value="Open" description="Cash • bank • transfers" action="Go to accounts" icon="bi-calculator" />
         <Kpi to="/cash-flow" tone="blue" label="Cash Flow" value="View" description="Receipts & payments report" action="Open cash flow" icon="bi-water" />
         <Kpi to="/cash-flow-differences" tone="amber" label="Cash Flow Differences" value="Audit" description="Physical cash reconciliation history" action="Review differences" icon="bi-shield-check" />

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import cookieParser from "cookie-parser";
 import { api } from "./routes.ts";
+import { xeroxApi } from "./xerox.ts";
 import { attachAuth, authApi, enforcePermission, requireAuth } from "./auth.ts";
 import "./db.ts";
 
@@ -23,6 +24,7 @@ app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 // arbitrary Origin while credentials are enabled.
 app.use(attachAuth);
 app.use("/api/auth", authApi);
+app.use("/api", requireAuth, enforcePermission, xeroxApi);
 app.use("/api", requireAuth, enforcePermission, api);
 
 app.get("/health", (_req, res) => {

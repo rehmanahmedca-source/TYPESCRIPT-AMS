@@ -1,159 +1,406 @@
-import { FormEvent } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { PageHeader, Card } from "../components/ui";
+import { Modal } from "../components/ui";
 import { api } from "../api";
-import { money, ymd } from "../format";
+import { rs } from "../format";
 import { useApi } from "../useApi";
 
+type Account = {
+  id: number;
+  name: string;
+  category: string;
+  account_type: string;
+  source_category?: string;
+  live_balance?: number;
+  balance?: number;
+  is_active?: number;
+};
+
+type Dash = {
+  accounts: Account[];
+  client_payments_today: number;
+  supplier_payments_today: number;
+  expenditures_today: number;
+  receipts_today: number;
+  totalCash: number;
+  totalBank: number;
+  totalCompanyMoney: number;
+  clients: { id: number; code: string; name: string }[];
+  suppliers: { id: number; name: string }[];
+  drivers: { id: number; name: string }[];
+  categories: { id: number; name: string }[];
+};
+
+const QA = [
+  ["/accounts/payments/clients", "bi-people-fill", "qa-1", "Client Payments", "Money received from clients"],
+  ["/accounts/payments/suppliers", "bi-truck", "qa-2", "Supplier Payments", "Money paid to suppliers"],
+  ["/accounts/expenditures", "bi-wallet2", "qa-3", "Expenditures", "Personal & operating expenses"],
+  ["/accounts/receipts", "bi-receipt", "qa-4", "Today's Receipts", "All cash inflow today"],
+  ["/accounts/accounts", "bi-gear-fill", "qa-5", "Manage Accounts", "Edit accounts & groups"],
+  ["/accounts/transfers", "bi-arrow-left-right", "qa-6", "View Transfers", "Inter-account transfers"],
+  ["/accounts/transfers/add", "bi-shuffle", "qa-7", "New Transfer", "Move money between accounts"],
+  ["/accounts/audit", "bi-shield-check", "qa-5", "Audit Trail", "Every penny across accounts"],
+  ["/cash_flow", "bi-water", "qa-7", "Cash Flow", "Record spend/receive; client & supplier money shows as derived"],
+  ["/accounts/accounts/add", "bi-plus-circle-fill", "qa-8", "Add Account", "Create a new cash/bank account"]
+] as const;
+
 export default function Accounts() {
-  const { data, reload } = useApi<{
-    accounts: { id: number; name: string; category: string; account_type: string; live_balance: number }[];
-    transactions: { id: number; date_posted: string; transaction_type: string; amount: number; description: string; from_name: string; to_name: string }[];
-    totalCash: number;
-    totalBank: number;
-    totalCompanyMoney: number;
-  }>("/accounts");
+  const { data, reload, error } = useApi<Dash>("/accounts");
+  const [txOpen, setTxOpen] = useState(false);
+  const [mode, setMode] = useState<"receive" | "pay">("receive");
+  const [saveErr, setSaveErr] = useState("");
+  const accounts = data?.accounts || [];
+  const clients = data?.clients || [];
+  const suppliers = data?.suppliers || [];
+  const drivers = data?.drivers || [];
 
-  async function transfer(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    await api("/accounts/transfer", {
-      method: "POST",
-      body: JSON.stringify({
-        from_account_id: fd.get("from_account_id"),
-        to_account_id: fd.get("to_account_id"),
-        amount: fd.get("amount"),
-        description: fd.get("description")
-      })
-    });
-    e.currentTarget.reset();
-    reload();
-  }
+  const nowLocal = useMemo(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  }, []);
 
-  async function expense(e: FormEvent<HTMLFormElement>) {
+  async function submitTx(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setSaveErr("");
     const fd = new FormData(e.currentTarget);
-    await api("/accounts/expense", {
-      method: "POST",
-      body: JSON.stringify({
-        account_id: fd.get("account_id"),
-        amount: fd.get("amount"),
-        category: fd.get("category"),
-        description: fd.get("description")
-      })
-    });
-    e.currentTarget.reset();
-    reload();
-  }
-
-  async function addAcc(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    await api("/accounts", {
-      method: "POST",
-      body: JSON.stringify({
-        name: fd.get("name"),
-        category: fd.get("category"),
-        account_type: "company",
-        opening_balance: fd.get("opening_balance"),
-        bank_name: fd.get("bank_name")
-      })
-    });
-    e.currentTarget.reset();
-    reload();
+    try {
+      await api("/accounts/transactions", {
+        method: "POST",
+        body: JSON.stringify({
+          tx_mode: mode,
+          date_posted: fd.get("date_posted"),
+          amount: fd.get("amount"),
+          method: fd.get("method"),
+          receive_from_category: fd.get("receive_from_category"),
+          receive_account_id: fd.get("receive_account_id"),
+          client_input: fd.get("client_input"),
+          receive_from_account_id: fd.get("receive_from_account_id"),
+          receive_source_label: fd.get("receive_source_label"),
+          discount: fd.get("discount"),
+          pay_from_account_id: fd.get("pay_from_account_id"),
+          pay_target: fd.get("pay_target"),
+          pay_to_account_id: fd.get("pay_to_account_id"),
+          supplier_id: fd.get("supplier_id"),
+          supplier_input: fd.get("supplier_input"),
+          target_label: fd.get("target_label"),
+          client_input_refund: fd.get("client_input_refund"),
+          delivery_person_id: fd.get("delivery_person_id"),
+          driver_input: fd.get("driver_input"),
+          reference: fd.get("reference"),
+          note: fd.get("note")
+        })
+      });
+      setTxOpen(false);
+      reload();
+    } catch (err) {
+      setSaveErr(err instanceof Error ? err.message : String(err));
+    }
   }
 
   return (
-    <div>
-      <PageHeader icon="bi-calculator" title="Accounts Hub" subtitle="Cash, bank, transfers and expenses">
-        <span className="badge bg-warning text-dark">Company {money(data?.totalCompanyMoney)}</span>
-      </PageHeader>
-      <div className="ui-kpi-grid mb-4">
-        <div className="ui-tile border-green"><div className="ui-tile-label">Cash</div><div className="ui-tile-value">{money(data?.totalCash)}</div></div>
-        <div className="ui-tile border-indigo"><div className="ui-tile-label">Bank</div><div className="ui-tile-value">{money(data?.totalBank)}</div></div>
-        <div className="ui-tile border-amber"><div className="ui-tile-label">Total</div><div className="ui-tile-value">{money(data?.totalCompanyMoney)}</div></div>
-      </div>
-      <div className="row">
-        <div className="col-lg-6">
-          <Card title="Transfer">
-            <form className="row g-2" onSubmit={transfer}>
-              <div className="col-6">
-                <select name="from_account_id" className="form-select" required>
-                  <option value="">From</option>
-                  {(data?.accounts || []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </div>
-              <div className="col-6">
-                <select name="to_account_id" className="form-select" required>
-                  <option value="">To</option>
-                  {(data?.accounts || []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </div>
-              <div className="col-6"><input name="amount" type="number" className="form-control" placeholder="Amount" required /></div>
-              <div className="col-6"><input name="description" className="form-control" placeholder="Note" /></div>
-              <div className="col-12"><button className="btn btn-info">Transfer</button></div>
-            </form>
-          </Card>
+    <div className="acc-page">
+      <div className="acc-page-header">
+        <div>
+          <h2><i className="bi bi-bank2 me-2" />Accounts Dashboard</h2>
+          <div className="subtitle">Today's money movement, account balances, and quick actions.</div>
         </div>
-        <div className="col-lg-6">
-          <Card title="Expense">
-            <form className="row g-2" onSubmit={expense}>
-              <div className="col-6">
-                <select name="account_id" className="form-select" required>
-                  <option value="">Pay from</option>
-                  {(data?.accounts || []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </div>
-              <div className="col-6"><input name="category" className="form-control" placeholder="Category" defaultValue="Yard Expense" /></div>
-              <div className="col-6"><input name="amount" type="number" className="form-control" placeholder="Amount" required /></div>
-              <div className="col-6"><input name="description" className="form-control" placeholder="Description" /></div>
-              <div className="col-12"><button className="btn btn-danger">Record expense</button></div>
-            </form>
-          </Card>
+        <div className="acc-toolbar">
+          <Link to="/cash_flow" className="btn btn-warning text-dark fw-bold"><i className="bi bi-water me-1" /> Cash Flow</Link>
+          <Link to="/accounts/accounts" className="btn btn-outline-secondary"><i className="bi bi-gear me-1" /> Manage Accounts</Link>
+          <button className="btn btn-primary" type="button" onClick={() => setTxOpen(true)}>
+            <i className="bi bi-plus-lg me-1" /> New Transaction
+          </button>
         </div>
       </div>
-      <Card title="New account">
-        <form className="row g-2" onSubmit={addAcc}>
-          <div className="col-md-4"><input name="name" className="form-control" placeholder="Name" required /></div>
-          <div className="col-md-2">
-            <select name="category" className="form-select"><option value="cash">Cash</option><option value="bank">Bank</option></select>
+      {error && <div className="alert alert-danger">{error}</div>}
+
+      <div className="row mb-4 g-3">
+        <div className="col-md-6 col-xl-3">
+          <Link to="/accounts/kpi/client_payments" className="card kpi-card kpi-green text-decoration-none">
+            <div className="card-body">
+              <div className="kpi-label"><i className="bi bi-arrow-down-circle me-1" /> Client Payments Today</div>
+              <div className="kpi-value"><small>Rs.</small> {Number(data?.client_payments_today || 0).toFixed(2)}</div>
+              <span className="kpi-cta">View details <i className="bi bi-arrow-right" /></span>
+            </div>
+            <i className="bi bi-people-fill kpi-icon" />
+          </Link>
+        </div>
+        <div className="col-md-6 col-xl-3">
+          <Link to="/accounts/kpi/supplier_payments" className="card kpi-card kpi-red text-decoration-none">
+            <div className="card-body">
+              <div className="kpi-label"><i className="bi bi-arrow-up-circle me-1" /> Supplier Payments Today</div>
+              <div className="kpi-value"><small>Rs.</small> {Number(data?.supplier_payments_today || 0).toFixed(2)}</div>
+              <span className="kpi-cta">View details <i className="bi bi-arrow-right" /></span>
+            </div>
+            <i className="bi bi-truck kpi-icon" />
+          </Link>
+        </div>
+        <div className="col-md-6 col-xl-3">
+          <Link to="/accounts/kpi/expenditures" className="card kpi-card kpi-amber text-decoration-none">
+            <div className="card-body">
+              <div className="kpi-label"><i className="bi bi-cash-stack me-1" /> Expenditures Today</div>
+              <div className="kpi-value"><small>Rs.</small> {Number(data?.expenditures_today || 0).toFixed(2)}</div>
+              <span className="kpi-cta">View details <i className="bi bi-arrow-right" /></span>
+            </div>
+            <i className="bi bi-wallet2 kpi-icon" />
+          </Link>
+        </div>
+        <div className="col-md-6 col-xl-3">
+          <Link to="/accounts/kpi/receipts" className="card kpi-card kpi-cyan text-decoration-none">
+            <div className="card-body">
+              <div className="kpi-label"><i className="bi bi-receipt me-1" /> Receipts Today</div>
+              <div className="kpi-value"><small>Rs.</small> {Number(data?.receipts_today || 0).toFixed(2)}</div>
+              <span className="kpi-cta">View details <i className="bi bi-arrow-right" /></span>
+            </div>
+            <i className="bi bi-file-earmark-text kpi-icon" />
+          </Link>
+        </div>
+        <div className="col-12">
+          <Link to="/accounts/kpi/cash_money" className="card kpi-card kpi-violet text-decoration-none">
+            <div className="card-body d-md-flex align-items-center justify-content-between gap-3">
+              <div>
+                <div className="kpi-label"><i className="bi bi-cash me-1" /> Total Cash Available</div>
+                <div className="kpi-value"><small>Rs.</small> {Number(data?.totalCash || 0).toFixed(2)}</div>
+                <div className="small mt-1" style={{ opacity: 0.85 }}>Sum of all active cash account balances.</div>
+              </div>
+              <span className="kpi-cta">View cash & bank <i className="bi bi-arrow-right" /></span>
+            </div>
+            <i className="bi bi-cash-coin kpi-icon" />
+          </Link>
+        </div>
+        <div className="col-12">
+          <Link to="/accounts/kpi/company_money" className="card kpi-card kpi-violet text-decoration-none">
+            <div className="card-body d-md-flex align-items-center justify-content-between gap-3">
+              <div>
+                <div className="kpi-label"><i className="bi bi-bank me-1" /> Total Money Available in Company</div>
+                <div className="kpi-value"><small>Rs.</small> {Number(data?.totalCompanyMoney || 0).toFixed(2)}</div>
+                <div className="small mt-1" style={{ opacity: 0.85 }}>Sum of all active company account balances.</div>
+              </div>
+              <span className="kpi-cta">View company accounts <i className="bi bi-arrow-right" /></span>
+            </div>
+            <i className="bi bi-piggy-bank kpi-icon" />
+          </Link>
+        </div>
+      </div>
+
+      <div className="card acc-section-card">
+        <div className="card-header">
+          <h5><i className="bi bi-list-columns-reverse me-2 text-info" />Account Balances</h5>
+          <Link to="/accounts/accounts" className="btn btn-sm btn-outline-secondary">Manage</Link>
+        </div>
+        <div className="card-body">
+          <div className="table-responsive">
+            <table className="table table-hover align-middle acc-table mb-0">
+              <thead>
+                <tr>
+                  <th>Account Name</th>
+                  <th>Type</th>
+                  <th>Channel</th>
+                  <th className="text-end">Balance</th>
+                  <th className="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accounts.map((a) => {
+                  const bal = Number(a.live_balance ?? a.balance ?? 0);
+                  return (
+                    <tr key={a.id}>
+                      <td>
+                        <div className="fw-semibold">{a.name}</div>
+                        {a.source_category ? <div className="small text-muted">{a.source_category}</div> : null}
+                      </td>
+                      <td><span className="badge badge-soft-violet">{a.account_type || "company"}</span></td>
+                      <td>
+                        {String(a.category).toLowerCase() === "bank" ? (
+                          <span className="badge badge-soft-info"><i className="bi bi-bank me-1" />Bank</span>
+                        ) : (
+                          <span className="badge badge-soft-amber"><i className="bi bi-cash-coin me-1" />Cash</span>
+                        )}
+                      </td>
+                      <td className="text-end">
+                        <span className={`acc-balance ${bal < 0 ? "neg" : ""}`}>{rs(bal)}</span>
+                      </td>
+                      <td className="text-end">
+                        <Link className="btn btn-sm btn-outline-primary" to={`/accounts/${a.id}/ledger`}>
+                          <i className="bi bi-journal-text me-1" />Ledger
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!accounts.length && (
+                  <tr><td colSpan={5} className="text-center text-muted py-4">No accounts yet. <Link to="/accounts/accounts/add">Add your first account</Link>.</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          <div className="col-md-3"><input name="opening_balance" type="number" className="form-control" placeholder="Opening" defaultValue={0} /></div>
-          <div className="col-md-3"><button className="btn btn-warning">Add account</button></div>
+        </div>
+      </div>
+
+      <div className="card acc-section-card mt-4">
+        <div className="card-header">
+          <h5><i className="bi bi-lightning-charge-fill me-2 text-warning" />Quick Actions</h5>
+        </div>
+        <div className="card-body">
+          <div className="row g-3">
+            {QA.map(([to, icon, qa, title, sub]) => (
+              <div className="col-md-6 col-xl-3" key={title}>
+                <Link to={to} className="quick-action">
+                  <div className={`qa-icon ${qa}`}><i className={`bi ${icon}`} /></div>
+                  <div>
+                    <div className="qa-title">{title}</div>
+                    <div className="qa-sub">{sub}</div>
+                  </div>
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <Modal open={txOpen} title="Make New Transaction" onClose={() => setTxOpen(false)} size="lg" footer={
+        <button type="submit" form="newTxForm" className="btn btn-primary">Submit Transaction</button>
+      }>
+        <form id="newTxForm" onSubmit={submitTx}>
+          {saveErr && <div className="alert alert-danger py-2">{saveErr}</div>}
+          <div className="mb-3">
+            <label className="form-label fw-semibold d-block mb-2">Transaction Type</label>
+            <div className="row g-2">
+              <div className="col-md-6">
+                <label className={`card h-100 ${mode === "receive" ? "border-primary" : "border-secondary"}`} style={{ cursor: "pointer" }}>
+                  <div className="card-body">
+                    <div className="form-check m-0">
+                      <input className="form-check-input" type="radio" checked={mode === "receive"} onChange={() => setMode("receive")} />
+                      <span className="form-check-label fw-bold">Receive Money</span>
+                    </div>
+                    <div className="small text-muted mt-2">Record money coming from a client into a company account.</div>
+                  </div>
+                </label>
+              </div>
+              <div className="col-md-6">
+                <label className={`card h-100 ${mode === "pay" ? "border-primary" : "border-secondary"}`} style={{ cursor: "pointer" }}>
+                  <div className="card-body">
+                    <div className="form-check m-0">
+                      <input className="form-check-input" type="radio" checked={mode === "pay"} onChange={() => setMode("pay")} />
+                      <span className="form-check-label fw-bold">Pay Money</span>
+                    </div>
+                    <div className="small text-muted mt-2">Record company transfers, supplier payments, and expenses.</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div className="row g-3">
+            <div className="col-md-6">
+              <label className="form-label">Posted Date</label>
+              <input type="datetime-local" className="form-control" name="date_posted" defaultValue={nowLocal} />
+            </div>
+            <div className="col-md-6">
+              <label className="form-label">Amount</label>
+              <input type="number" step="0.01" min="0" className="form-control" name="amount" required />
+            </div>
+            <div className="col-md-6">
+              <label className="form-label">Method</label>
+              <select className="form-select" name="method">
+                <option value="Cash">Cash</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Check">Check</option>
+                <option value="Online">Online</option>
+              </select>
+            </div>
+          </div>
+
+          {mode === "receive" ? (
+            <div className="mt-4">
+              <h6 className="fw-bold">Receive Money Details</h6>
+              <div className="row g-3">
+                <div className="col-md-6">
+                  <label className="form-label">Receive From Transaction Group</label>
+                  <select className="form-select" name="receive_from_category" defaultValue="client_ledger">
+                    <option value="client_ledger">Client Ledger</option>
+                    {(data?.categories || []).map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    <option value="other_source">Other Source</option>
+                  </select>
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">Receive To Account</label>
+                  <select className="form-select" name="receive_account_id">
+                    <option value="">Select company account receiving this payment</option>
+                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({rs(a.live_balance ?? a.balance)})</option>)}
+                  </select>
+                </div>
+                <div className="col-12">
+                  <label className="form-label">Receive From Client</label>
+                  <input className="form-control" name="client_input" list="txClients" placeholder="Search by client name or code" />
+                  <datalist id="txClients">
+                    {clients.map((c) => <option key={c.id} value={`${c.code} ${c.name}`} />)}
+                  </datalist>
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">Discount / Waive-Off</label>
+                  <input type="number" step="0.01" min="0" className="form-control" name="discount" defaultValue={0} />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4">
+              <h6 className="fw-bold">Pay Money Details</h6>
+              <div className="row g-3">
+                <div className="col-md-6">
+                  <label className="form-label">Pay From Account</label>
+                  <select className="form-select" name="pay_from_account_id">
+                    <option value="">Select source account</option>
+                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({rs(a.live_balance ?? a.balance)})</option>)}
+                  </select>
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">Pay Target</label>
+                  <select className="form-select" name="pay_target" defaultValue="company_transfer">
+                    <option value="company_transfer">Company Account Transfer</option>
+                    <option value="supplier">Supplier Payment</option>
+                    <option value="driver">Driver Service Payment</option>
+                    <option value="client_refund">Client Refund</option>
+                    <option value="loan">Loan Payment</option>
+                    <option value="personal_expense">Personal Expense</option>
+                    <option value="other_expense">Other Expense</option>
+                  </select>
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">Pay To Account</label>
+                  <select className="form-select" name="pay_to_account_id">
+                    <option value="">Select destination account</option>
+                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">Supplier</label>
+                  <input type="hidden" name="supplier_id" />
+                  <input className="form-control" name="supplier_input" list="txSuppliers" placeholder="Search supplier" />
+                  <datalist id="txSuppliers">{suppliers.map((s) => <option key={s.id} value={s.name} />)}</datalist>
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">Purpose / Target Label</label>
+                  <input className="form-control" name="target_label" placeholder="e.g. Office rent, Loan installment" />
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">Driver / Delivery Person</label>
+                  <input className="form-control" name="driver_input" list="txDrivers" placeholder="Search driver" />
+                  <datalist id="txDrivers">{drivers.map((d) => <option key={d.id} value={d.name} />)}</datalist>
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">Reference</label>
+                  <input className="form-control" name="reference" placeholder="Voucher / slip no." />
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="mt-3">
+            <label className="form-label">Note</label>
+            <textarea className="form-control" name="note" rows={2} placeholder="Optional note" />
+          </div>
         </form>
-      </Card>
-      <Card title="Accounts" flush>
-        <table className="ui-table mb-0">
-          <thead><tr><th>Name</th><th>Type</th><th className="text-end">Balance</th><th>Actions</th></tr></thead>
-          <tbody>
-            {(data?.accounts || []).map((a) => (
-              <tr key={a.id}>
-                <td className="fw-bold">{a.name}</td>
-                <td>{a.category} / {a.account_type}</td>
-                <td className="text-end">{money(a.live_balance)}</td>
-                <td><Link to={`/accounts/${a.id}/ledger`} className="btn btn-sm btn-outline-info">View Ledger</Link></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-      <Card title="Recent movements" flush>
-        <table className="ui-table mb-0">
-          <thead><tr><th>Date</th><th>Type</th><th>From</th><th>To</th><th>Description</th><th className="text-end">Amount</th></tr></thead>
-          <tbody>
-            {(data?.transactions || []).map((t) => (
-              <tr key={t.id}>
-                <td>{ymd(t.date_posted)}</td>
-                <td>{t.transaction_type}</td>
-                <td>{t.from_name || "—"}</td>
-                <td>{t.to_name || "—"}</td>
-                <td>{t.description}</td>
-                <td className="text-end">{money(t.amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+      </Modal>
     </div>
   );
 }
