@@ -28,11 +28,12 @@ import {
   updateBooking
 } from "./bookingsCore.ts";
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 } });
+const maxUploadMb = Math.max(1, Number(process.env.MAX_UPLOAD_MB || 256));
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: maxUploadMb * 1024 * 1024 } });
 export const api = Router();
 
-function actor(req: { cookies?: Record<string, string> }) {
-  return req.cookies?.ams_user || "Admin";
+function actor(req: { authUser?: { username: string } }) {
+  return req.authUser?.username || "system";
 }
 
 /* ---------------- bootstrap / settings ---------------- */
@@ -52,19 +53,19 @@ api.get("/bootstrap", (req, res) => {
 
 api.post("/settings", (req, res) => {
   const b = req.body || {};
-  const existing = one<{ id: number }>("SELECT id FROM settings ORDER BY id LIMIT 1");
+  const existing = one<AnyRow>("SELECT * FROM settings ORDER BY id LIMIT 1");
   if (existing) {
     run(
       `UPDATE settings SET company_name=?, company_address=?, company_phone=?, company_email=?, currency=?, tax_rate=?, ui_theme=?, allow_global_negative_stock=? WHERE id=?`,
       [
-        b.company_name,
-        b.company_address,
-        b.company_phone,
-        b.company_email,
-        b.currency || "PKR",
-        Number(b.tax_rate || 0),
-        b.ui_theme || "dark",
-        b.allow_global_negative_stock ? 1 : 0,
+        b.company_name ?? existing.company_name ?? "",
+        b.company_address ?? existing.company_address ?? "",
+        b.company_phone ?? existing.company_phone ?? "",
+        b.company_email ?? existing.company_email ?? null,
+        b.currency ?? existing.currency ?? "PKR",
+        Number(b.tax_rate ?? existing.tax_rate ?? 0),
+        b.ui_theme ?? existing.ui_theme ?? "dark",
+        b.allow_global_negative_stock === undefined ? Number(existing.allow_global_negative_stock || 0) : (b.allow_global_negative_stock ? 1 : 0),
         existing.id
       ]
     );
@@ -915,7 +916,7 @@ api.get(["/bookings/:id", "/bookings/:id/edit-modal"], (req, res) => {
 api.post(["/add_booking", "/bookings"], (req, res) => {
   try {
     const result = createBooking(req.body || {}, actor(req));
-    return res.json({ ok: true, ...result });
+    return res.json(result);
   } catch (e) {
     return res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
@@ -924,7 +925,7 @@ api.post(["/add_booking", "/bookings"], (req, res) => {
 api.post(["/edit_bill/Booking/:id", "/bookings/:id"], (req, res) => {
   try {
     const result = updateBooking(Number(req.params.id), req.body || {}, actor(req));
-    return res.json({ ok: true, ...result });
+    return res.json(result);
   } catch (e) {
     return res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
@@ -1287,7 +1288,7 @@ api.get("/delivery-rents", (_req, res) => {
 
 /* ---------------- accounts / cash ---------------- */
 api.get("/accounts", (_req, res) => {
-  const accounts = all<AnyRow>("SELECT * FROM account ORDER BY name").map((a) => ({
+  const accounts: AnyRow[] = all<AnyRow>("SELECT * FROM account ORDER BY name").map((a) => ({
     ...a,
     live_balance: accountNet(Number(a.id))
   }));

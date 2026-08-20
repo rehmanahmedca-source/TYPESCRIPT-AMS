@@ -2,7 +2,7 @@ import { all, one, run } from "./db.ts";
 import { money, pkDate, pkNow, pkTime, toMinor, ymd } from "./money.ts";
 import { nextAutoBill, normalizeManualBill } from "./bills.ts";
 
-export type AnyRow = Record<string, unknown>;
+export type AnyRow = Record<string, any>;
 
 export function stockMap(): Record<string, { inn: number; out: number; stock: number; rate: number; unit: string; category: string; code: string; name: string; id: number }> {
   const mats = all<AnyRow>(

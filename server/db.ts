@@ -2,68 +2,51 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
+import { migrateDatabase } from "./migrations.ts";
 import { seedIfEmpty } from "./seed.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 
-export const instanceDir = path.join(root, "instance");
-export const dbPath = path.join(instanceDir, "ahmed_cement.db");
+export const dbPath = path.resolve(process.env.APP_DB_PATH || path.join(root, "instance", "ahmed_cement.db"));
+export const instanceDir = path.dirname(dbPath);
 
 fs.mkdirSync(instanceDir, { recursive: true });
 
 export const db = new DatabaseSync(dbPath);
-db.exec("PRAGMA journal_mode = WAL");
+db.exec("PRAGMA busy_timeout = 8000");
 db.exec("PRAGMA foreign_keys = OFF");
-db.exec("PRAGMA busy_timeout = 5000");
 
 function applySchema() {
   const schema = fs.readFileSync(path.join(__dirname, "schema.sql"), "utf8");
-  // Replace CREATE TABLE with CREATE TABLE IF NOT EXISTS to avoid errors on restart
   const safeSchema = schema.replace(/CREATE TABLE\s+/gi, "CREATE TABLE IF NOT EXISTS ");
   db.exec(safeSchema);
-  const indexes = [
-    "CREATE INDEX IF NOT EXISTS ix_grn_auto_bill_no ON grn(auto_bill_no)",
-    "CREATE INDEX IF NOT EXISTS ix_grn_manual_bill_no ON grn(manual_bill_no)",
-    "CREATE INDEX IF NOT EXISTS ix_direct_sale_manual_bill_no ON direct_sale(manual_bill_no)",
-    "CREATE INDEX IF NOT EXISTS ix_direct_sale_auto_bill_no ON direct_sale(auto_bill_no)",
-    "CREATE INDEX IF NOT EXISTS ix_booking_manual_bill_no ON booking(manual_bill_no)",
-    "CREATE INDEX IF NOT EXISTS ix_booking_auto_bill_no ON booking(auto_bill_no)",
-    "CREATE INDEX IF NOT EXISTS ix_payment_manual_bill_no ON payment(manual_bill_no)",
-    "CREATE INDEX IF NOT EXISTS ix_payment_auto_bill_no ON payment(auto_bill_no)",
-    "CREATE INDEX IF NOT EXISTS ix_entry_bill_no ON entry(bill_no)",
-    "CREATE INDEX IF NOT EXISTS ix_entry_material ON entry(material)",
-    "CREATE INDEX IF NOT EXISTS ix_entry_type ON entry(type)",
-    "CREATE INDEX IF NOT EXISTS ix_pending_bill_bill_no ON pending_bill(bill_no)",
-    "CREATE INDEX IF NOT EXISTS ix_client_code ON client(code)",
-    "CREATE INDEX IF NOT EXISTS ix_material_code ON material(code)",
-    "CREATE INDEX IF NOT EXISTS ix_direct_sale_date ON direct_sale(date_posted)",
-    "CREATE INDEX IF NOT EXISTS ix_payment_date ON payment(date_posted)"
-  ];
-  for (const sql of indexes) {
-    try {
-      db.exec(sql);
-    } catch {
-      /* ignore */
-    }
-  }
+  migrateDatabase(db, __dirname);
 }
 
 applySchema();
+db.exec("PRAGMA foreign_keys = ON");
+try {
+  const requested = (process.env.SQLITE_JOURNAL_MODE || "WAL").toUpperCase();
+  const mode = ["WAL", "DELETE", "TRUNCATE", "PERSIST", "MEMORY", "OFF"].includes(requested) ? requested : "WAL";
+  db.exec(`PRAGMA journal_mode = ${mode}`);
+} catch (error) {
+  console.warn("Could not set SQLite journal mode; using database default", error);
+}
 seedIfEmpty(db);
 
-export type Row = Record<string, unknown>;
+export type Row = Record<string, any>;
 
-export function all<T = Row>(sql: string, params: unknown[] = []): T[] {
+export function all<T = Row>(sql: string, params: any[] = []): T[] {
   return db.prepare(sql).all(...params) as T[];
 }
 
-export function one<T = Row>(sql: string, params: unknown[] = []): T | undefined {
+export function one<T = Row>(sql: string, params: any[] = []): T | undefined {
   return (db.prepare(sql).get(...params) as T | undefined) ?? undefined;
 }
 
-export function run(sql: string, params: unknown[] = []) {
+export function run(sql: string, params: any[] = []) {
   const result = db.prepare(sql).run(...params) as { lastInsertRowid?: number | bigint; changes?: number };
   return {
     lastInsertRowid: Number(result.lastInsertRowid || 0),

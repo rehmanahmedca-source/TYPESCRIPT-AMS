@@ -31,6 +31,7 @@ import ProfitReports from "./pages/ProfitReports";
 import ImportExport from "./pages/ImportExport";
 import Settings from "./pages/Settings";
 import VoidAudit from "./pages/VoidAudit";
+import Login from "./pages/Login";
 
 type Boot = {
   today?: string;
@@ -38,13 +39,28 @@ type Boot = {
 };
 
 export default function App() {
-  const [boot, setBoot] = useState<Boot>({ today: "", user: { username: "Admin", role: "admin" } });
+  const [authUser, setAuthUser] = useState<Record<string, unknown> | null | undefined>(undefined);
+  const [boot, setBoot] = useState<Boot>({ today: "", user: {} });
+
+  async function loadApplication(user?: Record<string, unknown>) {
+    const me = user || (await api<{ user: Record<string, unknown> }>("/auth/me")).user;
+    setAuthUser(me);
+    setBoot(await api<Boot>("/bootstrap"));
+  }
 
   useEffect(() => {
-    api<Boot>("/bootstrap")
-      .then(setBoot)
-      .catch(() => undefined);
+    loadApplication().catch(() => setAuthUser(null));
+    const unauthorized = () => setAuthUser(null);
+    window.addEventListener("ams:unauthorized", unauthorized);
+    return () => window.removeEventListener("ams:unauthorized", unauthorized);
   }, []);
+
+  if (authUser === undefined) {
+    return <div className="min-vh-100 d-flex align-items-center justify-content-center text-muted">Opening AMS…</div>;
+  }
+  if (!authUser) {
+    return <Login onLogin={(user) => loadApplication(user).catch(() => setAuthUser(null))} />;
+  }
 
   return (
     <Routes>
