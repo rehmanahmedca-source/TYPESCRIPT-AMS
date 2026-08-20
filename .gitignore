@@ -1,0 +1,12 @@
+.venv/
+instance/
+*.db
+deployment.log
+node_modules/
+dist/
+dist-server/
+.DS_Store
+.env
+uploads/
+*.xlsx
+!templates/*.xlsx

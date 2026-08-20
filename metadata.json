@@ -1,0 +1,8 @@
+{
+  "name": "AMS ERP",
+  "description": "Ahmed Material System ERP in TypeScript/React — inventory, sales, bookings, ledgers, cash flow, dispatch, and XLSX import/export on the original SQLite schema.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

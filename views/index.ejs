@@ -1,0 +1,360 @@
+<div class="ui-v2">
+  <!-- Page Header -->
+  <div class="ui-page-header">
+    <div>
+      <h1 class="ui-title">
+        <i class="bi bi-speedometer2 text-warning"></i> System Dashboard
+      </h1>
+      <div class="text-muted small mt-1">
+        Centralized Executive Control &amp; Operations Center &bull; <%= today_date %>
+      </div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <a href="/stock_summary" class="btn btn-warning btn-pill fw-bold">
+        <i class="bi bi-graph-up me-1"></i> Stock Summary
+      </a>
+      <a href="/direct_sales" class="btn btn-outline-secondary btn-pill fw-bold">
+        <i class="bi bi-cart-plus me-1"></i> New Sale
+      </a>
+    </div>
+  </div>
+
+  <!-- Centralized Dashboard Summary Metrics Component -->
+  <div class="ui-card mb-4 border border-warning border-opacity-25" id="centralized-summary-dashboard" style="background: linear-gradient(180deg, var(--ui-surface) 0%, var(--ui-surface-2) 100%);">
+    <div class="ui-card-header d-flex align-items-center justify-content-between pb-3 border-bottom border-secondary border-opacity-25">
+      <div class="d-flex align-items-center gap-2">
+        <div class="rounded p-2 bg-warning bg-opacity-10 text-warning">
+          <i class="bi bi-grid-1x2-fill fs-5"></i>
+        </div>
+        <div>
+          <h5 class="mb-0 fw-bold">Executive Summary &amp; Operations Key Metrics</h5>
+          <span class="text-muted small">Consolidated inventory valuation, logistics dispatch pipeline, and revenue totals</span>
+        </div>
+      </div>
+      <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 px-3 py-2 rounded-pill small">
+        <i class="bi bi-broadcast me-1"></i> Live Real-Time Feed
+      </span>
+    </div>
+
+    <div class="ui-card-body p-4">
+      <div class="row g-4">
+        <!-- 1. Total Inventory Value Metric Card -->
+        <div class="col-lg-4 col-md-6">
+          <div class="p-3 rounded-3 h-100" style="background: var(--ui-surface-3); border: 1px solid var(--ui-border);">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <span class="text-uppercase tracking-wider text-muted small fw-semibold">Total Inventory Value</span>
+                <div class="fs-2 fw-bold text-warning mt-1"><%= formatMoney(totalInventoryValue) %></div>
+              </div>
+              <div class="p-2 rounded bg-warning bg-opacity-25 text-warning">
+                <i class="bi bi-box-seam fs-4"></i>
+              </div>
+            </div>
+
+            <div class="mt-3 pt-3 border-top border-secondary border-opacity-25">
+              <div class="d-flex justify-content-between align-items-center small mb-1">
+                <span class="text-muted">Retail Market Value:</span>
+                <span class="fw-bold text-light"><%= formatMoney(totalInventoryRetailValue) %></span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center small mb-2">
+                <span class="text-muted">Total Units on Hand:</span>
+                <span class="fw-bold text-warning"><%= formatNumber(totalStock) %> Units</span>
+              </div>
+              <div class="progress" style="height: 6px; background-color: rgba(255,255,255,0.08);">
+                <div class="progress-bar bg-warning" role="progressbar" style="width: 78%;" aria-valuenow="78" aria-valuemin="0" aria-valuemax="100"></div>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mt-3">
+                <a href="/stock_summary" class="small text-warning text-decoration-none fw-semibold">
+                  Manage Inventory <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+                <span class="badge bg-success bg-opacity-25 text-success small">Optimal Levels</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Pending Dispatches & Fleet Status Metric Card -->
+        <div class="col-lg-4 col-md-6">
+          <div class="p-3 rounded-3 h-100" style="background: var(--ui-surface-3); border: 1px solid var(--ui-border);">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <span class="text-uppercase tracking-wider text-muted small fw-semibold">Pending Dispatches</span>
+                <div class="fs-2 fw-bold text-info mt-1"><%= pendingDispatchesCount %> <span class="fs-5 text-muted fw-normal">Orders</span></div>
+              </div>
+              <div class="p-2 rounded bg-info bg-opacity-25 text-info">
+                <i class="bi bi-truck fs-4"></i>
+              </div>
+            </div>
+
+            <div class="mt-3 pt-3 border-top border-secondary border-opacity-25">
+              <div class="d-flex justify-content-between align-items-center small mb-1">
+                <span class="text-muted">Pending Booking Volume:</span>
+                <span class="fw-bold text-info"><%= formatNumber(pendingBookingUnits) %> Bags/Units</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center small mb-2">
+                <span class="text-muted">Fleet on Road / In-Transit:</span>
+                <span class="fw-bold text-light"><%= activeDriversOnTrip %> of <%= totalDrivers %> Drivers Active</span>
+              </div>
+              <div class="progress" style="height: 6px; background-color: rgba(255,255,255,0.08);">
+                <div class="progress-bar bg-info" role="progressbar" style="width: <%= (activeDriversOnTrip / (totalDrivers || 1)) * 100 %>%;"></div>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mt-3">
+                <a href="/dispatching" class="small text-info text-decoration-none fw-semibold">
+                  Dispatch Board <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+                <span class="badge bg-info bg-opacity-25 text-info small">Fleet Active</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Recent Sales Totals Metric Card -->
+        <div class="col-lg-4 col-md-12">
+          <div class="p-3 rounded-3 h-100" style="background: var(--ui-surface-3); border: 1px solid var(--ui-border);">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <span class="text-uppercase tracking-wider text-muted small fw-semibold">Recent Sales Totals</span>
+                <div class="fs-2 fw-bold text-success mt-1"><%= formatMoney(recentSalesTotal) %></div>
+              </div>
+              <div class="p-2 rounded bg-success bg-opacity-25 text-success">
+                <i class="bi bi-cash-stack fs-4"></i>
+              </div>
+            </div>
+
+            <div class="mt-3 pt-3 border-top border-secondary border-opacity-25">
+              <div class="d-flex justify-content-between align-items-center small mb-1">
+                <span class="text-muted">Cash Realized / Paid:</span>
+                <span class="fw-bold text-success"><%= formatMoney(recentSalesPaid) %></span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center small mb-2">
+                <span class="text-muted">Credit Extended (Due):</span>
+                <span class="fw-bold text-danger"><%= formatMoney(recentSalesDue) %></span>
+              </div>
+              <div class="progress" style="height: 6px; background-color: rgba(255,255,255,0.08);">
+                <div class="progress-bar bg-success" role="progressbar" style="width: <%= recentSalesTotal > 0 ? (recentSalesPaid / recentSalesTotal) * 100 : 0 %>%;"></div>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mt-3">
+                <a href="/direct_sales" class="small text-success text-decoration-none fw-semibold">
+                  View Invoices (<%= recentSalesCount %>) <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+                <span class="small text-muted">Avg: <%= formatMoney(avgOrderValue) %></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Operational KPI Drilldown Tiles -->
+  <div class="ui-kpi-grid mb-4">
+    <a href="/stock_summary" class="ui-tile-link text-decoration-none">
+      <div class="ui-tile border-amber">
+        <div class="d-flex justify-content-between align-items-start">
+          <span class="ui-tile-label">Total Inventory</span>
+          <i class="bi bi-box-seam text-warning fs-4"></i>
+        </div>
+        <div class="ui-tile-value"><%= formatNumber(totalStock) %></div>
+        <div class="ui-tile-sub text-muted">Units currently in stock</div>
+      </div>
+    </a>
+
+    <a href="/clients" class="ui-tile-link text-decoration-none">
+      <div class="ui-tile border-indigo">
+        <div class="d-flex justify-content-between align-items-start">
+          <span class="ui-tile-label">Registered Clients</span>
+          <i class="bi bi-people-fill text-info fs-4"></i>
+        </div>
+        <div class="ui-tile-value"><%= formatNumber(clientCount) %></div>
+        <div class="ui-tile-sub text-muted">Active customer base</div>
+      </div>
+    </a>
+
+    <a href="/financial_details?type=cash" class="ui-tile-link text-decoration-none">
+      <div class="ui-tile border-green">
+        <div class="d-flex justify-content-between align-items-start">
+          <span class="ui-tile-label">Daily Cash Received</span>
+          <i class="bi bi-cash-stack text-success fs-4"></i>
+        </div>
+        <div class="ui-tile-value text-success"><%= formatMoney(dailyCash) %></div>
+        <div class="ui-tile-sub text-muted">Today, <%= today_date %></div>
+      </div>
+    </a>
+
+    <a href="/financial_details?type=credit" class="ui-tile-link text-decoration-none">
+      <div class="ui-tile border-rose">
+        <div class="d-flex justify-content-between align-items-start">
+          <span class="ui-tile-label">Daily Due Amount</span>
+          <i class="bi bi-credit-card text-danger fs-4"></i>
+        </div>
+        <div class="ui-tile-value text-danger"><%= formatMoney(dailyCredit) %></div>
+        <div class="ui-tile-sub text-muted">Credit posted today</div>
+      </div>
+    </a>
+
+    <a href="/clients" class="ui-tile-link text-decoration-none">
+      <div class="ui-tile border-red">
+        <div class="d-flex justify-content-between align-items-start">
+          <span class="ui-tile-label">Total Outstanding</span>
+          <i class="bi bi-exclamation-circle text-danger fs-4"></i>
+        </div>
+        <div class="ui-tile-value text-danger"><%= formatMoney(totalOutstanding) %></div>
+        <div class="ui-tile-sub text-muted">Across all open client balances</div>
+      </div>
+    </a>
+
+    <a href="/accounts" class="ui-tile-link text-decoration-none">
+      <div class="ui-tile border-violet">
+        <div class="d-flex justify-content-between align-items-start">
+          <span class="ui-tile-label">Accounts Hub</span>
+          <i class="bi bi-calculator text-primary fs-4"></i>
+        </div>
+        <div class="ui-tile-value">Open</div>
+        <div class="ui-tile-sub text-muted">Cash + bank + transfers</div>
+      </div>
+    </a>
+
+    <a href="/cash_flow" class="ui-tile-link text-decoration-none">
+      <div class="ui-tile border-indigo">
+        <div class="d-flex justify-content-between align-items-start">
+          <span class="ui-tile-label">Cash Flow</span>
+          <i class="bi bi-water text-info fs-4"></i>
+        </div>
+        <div class="ui-tile-value">View</div>
+        <div class="ui-tile-sub text-muted">Receipts &amp; payments report</div>
+      </div>
+    </a>
+
+    <a href="/cash_flow_differences" class="ui-tile-link text-decoration-none">
+      <div class="ui-tile border-amber">
+        <div class="d-flex justify-content-between align-items-start">
+          <span class="ui-tile-label">Reconciliation</span>
+          <i class="bi bi-clipboard-check text-warning fs-4"></i>
+        </div>
+        <div class="ui-tile-value">Audit</div>
+        <div class="ui-tile-sub text-muted">Physical cash drawer logs</div>
+      </div>
+    </a>
+  </div>
+
+  <!-- Quick Actions Panel -->
+  <div class="ui-card mb-4">
+    <div class="ui-card-header d-flex align-items-center justify-content-between">
+      <h5 class="mb-0 fw-bold">
+        <i class="bi bi-lightning-charge-fill text-warning me-2"></i> Quick Actions
+      </h5>
+    </div>
+    <div class="ui-card-body">
+      <div class="ui-quick-grid">
+        <a href="/direct_sales" class="ui-quick">
+          <i class="bi bi-cart-check"></i> New Sale
+        </a>
+        <a href="/bookings" class="ui-quick">
+          <i class="bi bi-bookmark-plus"></i> New Booking
+        </a>
+        <a href="/stock_summary" class="ui-quick">
+          <i class="bi bi-graph-up"></i> Stock Intake (GRN)
+        </a>
+        <a href="/clients" class="ui-quick">
+          <i class="bi bi-people"></i> Add Client
+        </a>
+        <a href="/accounts" class="ui-quick">
+          <i class="bi bi-cash-stack"></i> Record Expense
+        </a>
+        <a href="/cash_flow_differences" class="ui-quick">
+          <i class="bi bi-clipboard-check"></i> Physical Audit
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Sales & Invoices Summary -->
+  <div class="ui-card mb-4">
+    <div class="ui-card-header d-flex align-items-center justify-content-between">
+      <h5 class="mb-0 fw-bold">
+        <i class="bi bi-receipt text-warning me-2"></i> Recent Sales Transactions
+      </h5>
+      <a href="/direct_sales" class="btn btn-sm btn-outline-warning fw-bold">
+        <i class="bi bi-arrow-right me-1"></i> All Sales Invoices
+      </a>
+    </div>
+    <div class="ui-card-body p-0">
+      <div class="table-responsive">
+        <table class="ui-table mb-0">
+          <thead>
+            <tr>
+              <th>Invoice #</th>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Material</th>
+              <th class="text-center">Quantity</th>
+              <th class="text-end">Total Amount</th>
+              <th class="text-end">Paid Amount</th>
+              <th class="text-end">Due Amount</th>
+              <th class="text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% recentSales.forEach(s => { %>
+              <tr>
+                <td><strong class="text-warning"><%= s.id %></strong></td>
+                <td><%= s.date %></td>
+                <td><strong><%= s.clientName %></strong></td>
+                <td><%= s.materialName %></td>
+                <td class="text-center fw-bold"><%= s.quantity %> <small class="text-muted"><%= s.unit %></small></td>
+                <td class="text-end fw-bold"><%= formatMoney(s.total) %></td>
+                <td class="text-end text-success"><%= formatMoney(s.paid) %></td>
+                <td class="text-end text-danger"><%= formatMoney(s.due) %></td>
+                <td class="text-center">
+                  <span class="badge bg-success bg-opacity-25 text-success"><%= s.status %></span>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Brand Stock Table -->
+  <div class="ui-card">
+    <div class="ui-card-header d-flex align-items-center justify-content-between">
+      <h5 class="mb-0 fw-bold">
+        <i class="bi bi-tags text-warning me-2"></i> Current Stock by Brand
+      </h5>
+      <a href="/materials" class="btn btn-sm btn-outline-secondary fw-bold">
+        <i class="bi bi-pencil-square me-1"></i> Manage Brands
+      </a>
+    </div>
+    <div class="ui-card-body p-0">
+      <div class="table-responsive">
+        <table class="ui-table mb-0">
+          <thead>
+            <tr>
+              <th>Brand Name</th>
+              <th>Category</th>
+              <th class="text-center">In (Total)</th>
+              <th class="text-center">Out (Total)</th>
+              <th class="text-end">Current Stock</th>
+              <th class="text-end">Selling Rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% stats.forEach(s => { %>
+              <tr>
+                <td><strong><%= s.name %></strong></td>
+                <td><span class="badge bg-secondary bg-opacity-25 text-body"><%= s.category %></span></td>
+                <td class="text-center text-success fw-bold">+<%= formatNumber(s.in) %></td>
+                <td class="text-center text-danger fw-bold">−<%= formatNumber(s.out) %></td>
+                <td class="text-end fw-bold text-warning">
+                  <%= formatNumber(s.stock) %> <small class="text-muted"><%= s.unit %></small>
+                </td>
+                <td class="text-end"><%= formatMoney(s.rate) %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

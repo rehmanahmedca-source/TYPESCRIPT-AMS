@@ -1,0 +1,81 @@
+<div class="ui-v2">
+  <div class="ui-page-header">
+    <div>
+      <h1 class="ui-title">
+        <i class="bi bi-water text-warning"></i> Cash Flow Statement
+      </h1>
+      <div class="text-muted small mt-1">Detailed record of cash inflows, outflows, collections, and vendor payouts</div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <a href="/cash_flow_differences" class="btn btn-outline-warning btn-pill fw-bold">
+        <i class="bi bi-clipboard-check me-1"></i> Cash Differences Audit
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Total Cash &amp; Bank Inflows</div>
+        <div class="fs-3 fw-bold text-success mt-1">+<%= formatMoney(totalInflow) %></div>
+        <div class="text-muted small mt-1">Direct sales &amp; client payments</div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Total Cash &amp; Bank Outflows</div>
+        <div class="fs-3 fw-bold text-danger mt-1">−<%= formatMoney(totalOutflow) %></div>
+        <div class="text-muted small mt-1">Supplier payments &amp; operational expenses</div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Net Cash Flow</div>
+        <div class="fs-3 fw-bold <%= netFlow >= 0 ? 'text-success' : 'text-danger' %> mt-1">
+          <%= netFlow >= 0 ? '+' : '' %><%= formatMoney(netFlow) %>
+        </div>
+        <div class="text-muted small mt-1">Net period liquidity change</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ui-card">
+    <div class="ui-card-header">
+      <h5 class="mb-0 fw-bold">Cash Flow Activity Journal</h5>
+    </div>
+    <div class="ui-card-body p-0">
+      <div class="table-responsive">
+        <table class="ui-table mb-0">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Reference</th>
+              <th>Category</th>
+              <th>Account</th>
+              <th>Description</th>
+              <th class="text-end">Inflow (+)</th>
+              <th class="text-end">Outflow (−)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% cashFlows.forEach(c => { %>
+              <tr>
+                <td><%= c.date %></td>
+                <td><span class="badge bg-secondary bg-opacity-25 text-body"><%= c.ref %></span></td>
+                <td><%= c.category %></td>
+                <td><strong><%= c.account %></strong></td>
+                <td><%= c.description %></td>
+                <td class="text-end text-success fw-bold">
+                  <%= c.type === 'Receipt' ? formatMoney(c.amount) : '-' %>
+                </td>
+                <td class="text-end text-danger fw-bold">
+                  <%= c.type === 'Payment' ? formatMoney(c.amount) : '-' %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

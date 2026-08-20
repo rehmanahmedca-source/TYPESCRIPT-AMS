@@ -1,0 +1,55 @@
+<div class="ui-v2">
+  <div class="ui-page-header">
+    <div>
+      <a href="/" class="text-muted small text-decoration-none mb-1 d-inline-block">
+        <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+      </a>
+      <h1 class="ui-title">
+        <i class="bi <%= type === 'cash' ? 'bi-cash-stack text-success' : 'bi-credit-card text-danger' %>"></i>
+        <%= title %>
+      </h1>
+      <div class="text-muted small mt-1">Transaction entries posted for <%= today_date %></div>
+    </div>
+  </div>
+
+  <div class="ui-card">
+    <div class="ui-card-header">
+      <h5 class="mb-0 fw-bold">Invoices &amp; Breakdown (<%= type === 'cash' ? 'Cash Collected' : 'Credit Due' %>)</h5>
+    </div>
+    <div class="ui-card-body p-0">
+      <div class="table-responsive">
+        <table class="ui-table mb-0">
+          <thead>
+            <tr>
+              <th>Invoice #</th>
+              <th>Customer</th>
+              <th>Material</th>
+              <th class="text-center">Quantity</th>
+              <th class="text-end">Invoice Total</th>
+              <th class="text-end"><%= type === 'cash' ? 'Cash Received (Rs.)' : 'Due Amount (Rs.)' %></th>
+              <th>Payment Channel</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% items.forEach(s => { %>
+              <tr>
+                <td><strong class="text-warning"><%= s.id %></strong></td>
+                <td><strong><%= s.clientName %></strong></td>
+                <td><%= s.materialName %></td>
+                <td class="text-center"><%= s.quantity %> <%= s.unit %></td>
+                <td class="text-end"><%= formatMoney(s.total) %></td>
+                <td class="text-end fw-bold <%= type === 'cash' ? 'text-success' : 'text-danger' %>">
+                  <%= formatMoney(type === 'cash' ? s.paid : s.due) %>
+                </td>
+                <td><span class="badge bg-secondary bg-opacity-25 text-body"><%= s.paymentMethod %></span></td>
+              </tr>
+            <% }); %>
+            <% if (items.length === 0) { %>
+              <tr><td colspan="7" class="text-center text-muted p-4">No records found for today.</td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

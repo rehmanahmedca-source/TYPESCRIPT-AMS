@@ -1,0 +1,211 @@
+<div class="ui-v2">
+  <div class="ui-page-header">
+    <div>
+      <h1 class="ui-title">
+        <i class="bi bi-calculator text-warning"></i> Accounts Hub & Cash Management
+      </h1>
+      <div class="text-muted small mt-1">Physical cash drawer, bank balances, internal fund transfers, and expenditure</div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-warning btn-pill fw-bold" data-bs-toggle="modal" data-bs-target="#transferModal">
+        <i class="bi bi-arrow-left-right me-1"></i> Transfer Funds
+      </button>
+      <button class="btn btn-danger btn-pill fw-bold" data-bs-toggle="modal" data-bs-target="#expenseModal">
+        <i class="bi bi-dash-circle me-1"></i> Record Expense
+      </button>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Total Cash in Drawers</div>
+        <div class="fs-3 fw-bold text-success mt-1"><%= formatMoney(totalCash) %></div>
+        <div class="text-muted small mt-1">Physical cash available in yard & register</div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Total Bank Accounts Balance</div>
+        <div class="fs-3 fw-bold text-info mt-1"><%= formatMoney(totalBank) %></div>
+        <div class="text-muted small mt-1">Meezan & HBL corporate accounts</div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Total Liquid Assets</div>
+        <div class="fs-3 fw-bold text-warning mt-1"><%= formatMoney(totalCompanyMoney) %></div>
+        <div class="text-muted small mt-1">Consolidated liquid capital</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-md-6">
+      <div class="ui-card h-100">
+        <div class="ui-card-header">
+          <h5 class="mb-0 fw-bold"><i class="bi bi-wallet2 text-warning me-2"></i> Account Balances</h5>
+        </div>
+        <div class="ui-card-body p-0">
+          <div class="table-responsive">
+            <table class="ui-table mb-0">
+              <thead>
+                <tr>
+                  <th>Account Name</th>
+                  <th>Code</th>
+                  <th>Type</th>
+                  <th class="text-end">Balance (PKR)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% accounts.forEach(a => { %>
+                  <tr>
+                    <td><strong><%= a.name %></strong></td>
+                    <td><code><%= a.code %></code></td>
+                    <td><span class="badge <%= a.type === 'Cash' ? 'bg-success' : 'bg-primary' %> bg-opacity-25"><%= a.type %></span></td>
+                    <td class="text-end fw-bold fs-6"><%= formatMoney(a.balance) %></td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="ui-card h-100">
+        <div class="ui-card-header">
+          <h5 class="mb-0 fw-bold"><i class="bi bi-clock-history text-info me-2"></i> Recent Cash & Bank Flows</h5>
+        </div>
+        <div class="ui-card-body p-0">
+          <div class="table-responsive">
+            <table class="ui-table mb-0">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Type</th>
+                  <th>Description</th>
+                  <th class="text-end">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% cashFlows.forEach(c => { %>
+                  <tr>
+                    <td class="text-muted small"><%= c.date %></td>
+                    <td>
+                      <span class="badge <%= c.type === 'Receipt' ? 'bg-success text-success' : (c.type === 'Payment' ? 'bg-danger text-danger' : 'bg-info text-info') %> bg-opacity-25">
+                        <%= c.type %>
+                      </span>
+                    </td>
+                    <td><small><%= c.description %></small></td>
+                    <td class="text-end fw-bold <%= c.type === 'Receipt' ? 'text-success' : (c.type === 'Payment' ? 'text-danger' : 'text-info') %>">
+                      <%= c.type === 'Payment' ? '−' : '+' %><%= formatMoney(c.amount) %>
+                    </td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Fund Transfer Modal -->
+<div class="modal fade" id="transferModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background: var(--ui-surface); border: 1px solid var(--ui-border); color: var(--ui-text);">
+      <form action="/api/accounts/transfer" method="POST">
+        <div class="modal-header border-bottom border-secondary border-opacity-25">
+          <h5 class="modal-title fw-bold text-warning">
+            <i class="bi bi-arrow-left-right me-1"></i> Internal Funds Transfer
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small text-muted">From Account</label>
+            <select name="fromAccountId" class="form-select" required>
+              <% accounts.forEach(a => { %>
+                <option value="<%= a.id %>"><%= a.name %> (Bal: <%= formatMoney(a.balance) %>)</option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted">To Account</label>
+            <select name="toAccountId" class="form-select" required>
+              <% accounts.forEach((a, i) => { %>
+                <option value="<%= a.id %>" <%= i === 1 ? 'selected' : '' %>><%= a.name %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted">Transfer Amount (Rs.)</label>
+            <input type="number" name="amount" class="form-control text-warning fw-bold" placeholder="0" required min="1">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted">Description / Reason</label>
+            <input type="text" name="description" class="form-control" placeholder="e.g. Daily cash deposit to Meezan Bank">
+          </div>
+        </div>
+        <div class="modal-footer border-top border-secondary border-opacity-25">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning fw-bold">Execute Transfer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Record Expense Modal -->
+<div class="modal fade" id="expenseModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background: var(--ui-surface); border: 1px solid var(--ui-border); color: var(--ui-text);">
+      <form action="/api/accounts/expenditure" method="POST">
+        <div class="modal-header border-bottom border-secondary border-opacity-25">
+          <h5 class="modal-title fw-bold text-danger">
+            <i class="bi bi-dash-circle me-1"></i> Record Expenditure / Payout
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small text-muted">Paid From Account</label>
+            <select name="accountId" class="form-select" required>
+              <% accounts.forEach(a => { %>
+                <option value="<%= a.id %>"><%= a.name %> (Bal: <%= formatMoney(a.balance) %>)</option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col">
+              <label class="form-label small text-muted">Expense Category</label>
+              <select name="category" class="form-select">
+                <option value="Labour / Loading">Labour &amp; Loading</option>
+                <option value="Vehicle Fuel">Vehicle Diesel &amp; Fuel</option>
+                <option value="Yard Utility">Electricity &amp; Utilities</option>
+                <option value="Tea & Refreshment">Tea &amp; Staff Meals</option>
+                <option value="Maintenance">Yard &amp; Truck Maintenance</option>
+                <option value="Other Expense">Other Expense</option>
+              </select>
+            </div>
+            <div class="col">
+              <label class="form-label small text-muted">Amount (Rs.)</label>
+              <input type="number" name="amount" class="form-control text-danger fw-bold" placeholder="0" required min="1">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted">Description</label>
+            <input type="text" name="description" class="form-control" placeholder="e.g. Unloading labor for 800 bags cement" required>
+          </div>
+        </div>
+        <div class="modal-footer border-top border-secondary border-opacity-25">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger fw-bold">Post Expense</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

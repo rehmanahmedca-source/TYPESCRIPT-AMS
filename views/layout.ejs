@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title !== 'undefined' ? title + ' - ' : '' %>AMS SYSTEM FOR EASE</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/theme.css">
+  <link rel="stylesheet" href="/static/ui.css">
+  <script>
+    (function () {
+      var saved = "";
+      try { saved = localStorage.getItem("ams_theme") || ""; } catch (_) {}
+      var t = saved || "dark";
+      document.documentElement.setAttribute("data-theme", t);
+      document.documentElement.style.colorScheme = t;
+    })();
+  </script>
+  <style>
+    :root {
+      --sidebar-width: 260px;
+    }
+    body {
+      background-color: var(--ui-bg, #0b1020);
+      color: var(--ui-text, #eef2ff);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .sidebar {
+      width: var(--sidebar-width);
+      height: 100vh;
+      position: fixed;
+      left: 0;
+      top: 0;
+      background: var(--ui-surface-2, #0f1730);
+      border-right: 1px solid var(--ui-border, #2a3553);
+      display: flex;
+      flex-direction: column;
+      z-index: 1050;
+    }
+    .sidebar-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--ui-border, #2a3553);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .sidebar-brand {
+      font-weight: 800;
+      font-size: 1.15rem;
+      letter-spacing: 0.5px;
+      color: var(--ui-accent, #fbbf24);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sidebar-nav {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding: 16px 0;
+    }
+    .nav-group-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ui-text-muted, #94a3b8);
+      padding: 12px 24px 6px;
+      font-weight: 700;
+    }
+    .sidebar .nav-link {
+      color: var(--ui-text-soft, #cbd5f5);
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 500;
+      font-size: 0.92rem;
+      text-decoration: none;
+      border-left: 3px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .sidebar .nav-link:hover {
+      color: var(--ui-accent, #fbbf24);
+      background: rgba(251, 191, 36, 0.08);
+    }
+    .sidebar .nav-link.active {
+      color: var(--ui-accent, #fbbf24);
+      background: rgba(251, 191, 36, 0.12);
+      border-left-color: var(--ui-accent, #fbbf24);
+      font-weight: 600;
+    }
+    .main-wrapper {
+      margin-left: var(--sidebar-width);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      height: 64px;
+      border-bottom: 1px solid var(--ui-border, #2a3553);
+      background: var(--ui-surface, #161e33);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      position: sticky;
+      top: 0;
+      z-index: 1040;
+    }
+    .main-content {
+      padding: 28px;
+      flex-grow: 1;
+    }
+    .theme-toggle-btn {
+      background: var(--ui-surface-2, #0f1730);
+      border: 1px solid var(--ui-border, #2a3553);
+      color: var(--ui-text, #eef2ff);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .theme-toggle-btn:hover {
+      border-color: var(--ui-accent, #fbbf24);
+      color: var(--ui-accent, #fbbf24);
+    }
+    @media (max-width: 992px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .main-wrapper {
+        margin-left: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="appSidebar">
+    <div class="sidebar-header">
+      <a href="/" class="sidebar-brand">
+        <i class="bi bi-box-seam-fill text-warning"></i>
+        <span>AMS ERP</span>
+      </a>
+      <button class="btn btn-sm btn-link text-muted d-lg-none p-0" id="sidebarCloseBtn">
+        <i class="bi bi-x-lg fs-5"></i>
+      </button>
+    </div>
+
+    <div class="sidebar-nav">
+      <a href="/" class="nav-link <%= currentPath === '/' ? 'active' : '' %>">
+        <i class="bi bi-speedometer2"></i> Dashboard
+      </a>
+
+      <div class="nav-group-title">Inventory & Stock</div>
+      <a href="/stock_summary" class="nav-link <%= currentPath === '/stock_summary' ? 'active' : '' %>">
+        <i class="bi bi-graph-up"></i> Stock Summary
+      </a>
+      <a href="/materials" class="nav-link <%= currentPath === '/materials' ? 'active' : '' %>">
+        <i class="bi bi-tags"></i> Brand Master
+      </a>
+
+      <div class="nav-group-title">Sales & Fleet</div>
+      <a href="/direct_sales" class="nav-link <%= currentPath === '/direct_sales' ? 'active' : '' %>">
+        <i class="bi bi-cart-check"></i> Direct Sales
+      </a>
+      <a href="/bookings" class="nav-link <%= currentPath === '/bookings' ? 'active' : '' %>">
+        <i class="bi bi-bookmark-plus"></i> Bookings
+      </a>
+      <a href="/dispatching" class="nav-link <%= currentPath === '/dispatching' ? 'active' : '' %>">
+        <i class="bi bi-truck"></i> Dispatch Board
+      </a>
+      <a href="/delivery_persons" class="nav-link <%= currentPath === '/delivery_persons' ? 'active' : '' %>">
+        <i class="bi bi-person-badge"></i> Drivers & Fleet
+      </a>
+
+      <div class="nav-group-title">Parties & Ledgers</div>
+      <a href="/clients" class="nav-link <%= currentPath.startsWith('/client') ? 'active' : '' %>">
+        <i class="bi bi-people"></i> Clients & Ledgers
+      </a>
+      <a href="/suppliers" class="nav-link <%= currentPath.startsWith('/supplier') ? 'active' : '' %>">
+        <i class="bi bi-building"></i> Suppliers & Ledgers
+      </a>
+
+      <div class="nav-group-title">Finance & Cash</div>
+      <a href="/accounts" class="nav-link <%= currentPath === '/accounts' ? 'active' : '' %>">
+        <i class="bi bi-calculator"></i> Accounts Hub
+      </a>
+      <a href="/cash_flow" class="nav-link <%= currentPath === '/cash_flow' ? 'active' : '' %>">
+        <i class="bi bi-water"></i> Cash Flow
+      </a>
+      <a href="/cash_flow_differences" class="nav-link <%= currentPath === '/cash_flow_differences' ? 'active' : '' %>">
+        <i class="bi bi-clipboard-check"></i> Cash Reconciliation
+      </a>
+      <a href="/reports" class="nav-link <%= currentPath === '/reports' ? 'active' : '' %>">
+        <i class="bi bi-file-earmark-bar-graph"></i> Reports & Audit
+      </a>
+    </div>
+
+    <div class="p-3 border-top border-secondary border-opacity-25 text-muted small d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-shield-check text-success"></i>
+        <span><%= current_user.name %></span>
+      </div>
+      <span class="badge bg-warning text-dark">Admin</span>
+    </div>
+  </aside>
+
+  <!-- Main Wrapper -->
+  <div class="main-wrapper">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="d-flex align-items-center gap-3">
+        <button class="btn btn-sm btn-outline-secondary d-lg-none" id="sidebarToggleBtn">
+          <i class="bi bi-list fs-5"></i>
+        </button>
+        <span class="fw-semibold text-warning d-none d-sm-inline">
+          <i class="bi bi-building me-1"></i> Ahmed Material System
+        </span>
+      </div>
+
+      <div class="d-flex align-items-center gap-3">
+        <span class="text-muted small d-none d-md-inline">
+          <i class="bi bi-calendar3 me-1"></i> <%= today_date %>
+        </span>
+        <button class="theme-toggle-btn" id="themeToggleBtn">
+          <i class="bi bi-moon-stars" id="themeIcon"></i>
+          <span id="themeLabel">Theme</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Page Body -->
+    <main class="main-content">
+      <%- body %>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/theme.js"></script>
+  <script src="/static/ui.js"></script>
+  <script>
+    // Theme toggle handler
+    const toggleBtn = document.getElementById("themeToggleBtn");
+    const themeIcon = document.getElementById("themeIcon");
+    
+    function updateThemeUI() {
+      const current = document.documentElement.getAttribute("data-theme") || "dark";
+      if (themeIcon) {
+        themeIcon.className = current === "dark" ? "bi bi-sun" : "bi bi-moon-stars";
+      }
+    }
+    updateThemeUI();
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", () => {
+        const current = document.documentElement.getAttribute("data-theme") || "dark";
+        const next = current === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        document.documentElement.style.colorScheme = next;
+        try { localStorage.setItem("ams_theme", next); } catch (_) {}
+        updateThemeUI();
+      });
+    }
+
+    // Mobile sidebar toggle
+    const sbToggle = document.getElementById("sidebarToggleBtn");
+    const sbClose = document.getElementById("sidebarCloseBtn");
+    const sidebar = document.getElementById("appSidebar");
+    if (sbToggle && sidebar) {
+      sbToggle.addEventListener("click", () => sidebar.classList.add("open"));
+    }
+    if (sbClose && sidebar) {
+      sbClose.addEventListener("click", () => sidebar.classList.remove("open"));
+    }
+  </script>
+</body>
+</html>

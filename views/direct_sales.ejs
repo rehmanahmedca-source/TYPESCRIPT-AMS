@@ -1,0 +1,226 @@
+<div class="ui-v2">
+  <div class="ui-page-header">
+    <div>
+      <h1 class="ui-title">
+        <i class="bi bi-cart-check text-warning"></i> Direct Sales & Invoicing
+      </h1>
+      <div class="text-muted small mt-1">Cash sales, credit billing, delivery dispatch, and invoice generation</div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-warning btn-pill fw-bold" data-bs-toggle="modal" data-bs-target="#newSaleModal">
+        <i class="bi bi-plus-circle me-1"></i> New Direct Sale
+      </button>
+    </div>
+  </div>
+
+  <div class="ui-card">
+    <div class="ui-card-header d-flex align-items-center justify-content-between">
+      <h5 class="mb-0 fw-bold">Recent Invoices & Direct Dispatches</h5>
+      <input type="text" id="salesFilter" class="form-control form-control-sm w-auto" placeholder="Filter sales...">
+    </div>
+    <div class="ui-card-body p-0">
+      <div class="table-responsive">
+        <table class="ui-table mb-0" id="salesTable">
+          <thead>
+            <tr>
+              <th>Invoice #</th>
+              <th>Date</th>
+              <th>Client</th>
+              <th>Material</th>
+              <th class="text-center">Qty</th>
+              <th class="text-end">Rate</th>
+              <th class="text-end">Total (Rs.)</th>
+              <th class="text-end">Paid (Rs.)</th>
+              <th class="text-end">Due (Rs.)</th>
+              <th>Driver / Fleet</th>
+              <th class="text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% sales.forEach(s => { %>
+              <tr>
+                <td><strong class="text-warning"><%= s.id %></strong></td>
+                <td><%= s.date %></td>
+                <td><strong><%= s.clientName %></strong></td>
+                <td><%= s.materialName %></td>
+                <td class="text-center fw-bold"><%= s.quantity %> <small class="text-muted"><%= s.unit %></small></td>
+                <td class="text-end text-muted"><%= formatMoney(s.rate) %></td>
+                <td class="text-end fw-bold"><%= formatMoney(s.total) %></td>
+                <td class="text-end text-success"><%= formatMoney(s.paid) %></td>
+                <td class="text-end text-danger fw-bold"><%= formatMoney(s.due) %></td>
+                <td>
+                  <small><%= s.driverName %></small><br>
+                  <span class="text-muted" style="font-size: 0.75rem;"><%= s.destination %></span>
+                </td>
+                <td class="text-center">
+                  <span class="badge bg-success bg-opacity-25 text-success"><%= s.status %></span>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Direct Sale Modal -->
+<div class="modal fade" id="newSaleModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content" style="background: var(--ui-surface); border: 1px solid var(--ui-border); color: var(--ui-text);">
+      <form action="/api/direct_sales" method="POST" id="saleForm">
+        <div class="modal-header border-bottom border-secondary border-opacity-25">
+          <h5 class="modal-title fw-bold text-warning">
+            <i class="bi bi-cart-plus me-1"></i> Create Direct Sale Invoice
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small text-muted">Select Client</label>
+              <select name="clientId" class="form-select" required>
+                <% clients.forEach(c => { %>
+                  <option value="<%= c.id %>"><%= c.name %> (Bal: <%= formatMoney(c.balance) %>)</option>
+                <% }); %>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small text-muted">Material / Brand</label>
+              <select name="materialId" id="matSelect" class="form-select" required>
+                <% materials.forEach(m => { %>
+                  <option value="<%= m.id %>" data-rate="<%= m.rate %>" data-stock="<%= m.stock %>" data-unit="<%= m.unit %>">
+                    <%= m.name %> (Stock: <%= m.stock %> <%= m.unit %> - <%= formatMoney(m.rate) %>)
+                  </option>
+                <% }); %>
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label class="form-label small text-muted">Quantity</label>
+              <input type="number" name="quantity" id="qtyInput" class="form-control" placeholder="100" required min="1">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small text-muted">Unit Rate (Rs.)</label>
+              <input type="number" name="rate" id="rateInput" class="form-control" placeholder="Rate">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small text-muted">Discount (Rs.)</label>
+              <input type="number" name="discount" id="discInput" class="form-control" value="0">
+            </div>
+          </div>
+
+          <div class="p-3 mb-3 rounded" style="background: var(--ui-surface-2); border: 1px dashed var(--ui-border);">
+            <div class="row text-center">
+              <div class="col">
+                <span class="text-muted small">Subtotal:</span>
+                <div class="fw-bold fs-5" id="subtotalDisplay">Rs. 0</div>
+              </div>
+              <div class="col">
+                <span class="text-muted small">Grand Total:</span>
+                <div class="fw-bold fs-5 text-warning" id="totalDisplay">Rs. 0</div>
+              </div>
+              <div class="col">
+                <span class="text-muted small">Remaining Due:</span>
+                <div class="fw-bold fs-5 text-danger" id="dueDisplay">Rs. 0</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small text-muted">Paid Amount (Rs.)</label>
+              <input type="number" name="paidAmount" id="paidInput" class="form-control text-success fw-bold" placeholder="0" value="0">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small text-muted">Payment Channel</label>
+              <select name="paymentMethod" class="form-select">
+                <option value="Cash">Physical Cash Drawer</option>
+                <option value="Bank (Meezan)">Meezan Bank Deposit</option>
+                <option value="Bank (HBL)">HBL Corporate Account</option>
+                <option value="Credit">Full Credit (Rs. 0 Paid)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-2">
+            <div class="col-md-6">
+              <label class="form-label small text-muted">Assign Driver / Fleet Vehicle</label>
+              <select name="driverId" class="form-select">
+                <option value="">Self Pickup / Walk-in Customer</option>
+                <% drivers.forEach(d => { %>
+                  <option value="<%= d.id %>"><%= d.name %> (<%= d.vehicle %>)</option>
+                <% }); %>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small text-muted">Delivery Destination Site</label>
+              <input type="text" name="destination" class="form-control" placeholder="Project Site / Customer Address">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-top border-secondary border-opacity-25">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning fw-bold">Issue Invoice & Dispatch</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  const matSelect = document.getElementById('matSelect');
+  const qtyInput = document.getElementById('qtyInput');
+  const rateInput = document.getElementById('rateInput');
+  const discInput = document.getElementById('discInput');
+  const paidInput = document.getElementById('paidInput');
+  const subtotalDisplay = document.getElementById('subtotalDisplay');
+  const totalDisplay = document.getElementById('totalDisplay');
+  const dueDisplay = document.getElementById('dueDisplay');
+
+  function syncRates() {
+    const opt = matSelect.options[matSelect.selectedIndex];
+    if (opt && (!rateInput.value || rateInput.value === '0')) {
+      rateInput.value = opt.getAttribute('data-rate') || '0';
+    }
+    calcTotals();
+  }
+
+  function calcTotals() {
+    const qty = Number(qtyInput.value) || 0;
+    const rate = Number(rateInput.value) || 0;
+    const disc = Number(discInput.value) || 0;
+    const paid = Number(paidInput.value) || 0;
+
+    const sub = qty * rate;
+    const tot = Math.max(0, sub - disc);
+    const due = Math.max(0, tot - paid);
+
+    subtotalDisplay.innerText = 'Rs. ' + sub.toLocaleString();
+    totalDisplay.innerText = 'Rs. ' + tot.toLocaleString();
+    dueDisplay.innerText = 'Rs. ' + due.toLocaleString();
+  }
+
+  matSelect?.addEventListener('change', () => {
+    const opt = matSelect.options[matSelect.selectedIndex];
+    rateInput.value = opt.getAttribute('data-rate') || '0';
+    calcTotals();
+  });
+  qtyInput?.addEventListener('input', calcTotals);
+  rateInput?.addEventListener('input', calcTotals);
+  discInput?.addEventListener('input', calcTotals);
+  paidInput?.addEventListener('input', calcTotals);
+
+  // Filter
+  const salesFilter = document.getElementById('salesFilter');
+  if (salesFilter) {
+    salesFilter.addEventListener('input', function() {
+      const q = this.value.toLowerCase();
+      document.querySelectorAll('#salesTable tbody tr').forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+  }
+</script>

@@ -1,0 +1,110 @@
+<div class="ui-v2">
+  <div class="ui-page-header">
+    <div>
+      <h1 class="ui-title">
+        <i class="bi bi-clipboard-check text-warning"></i> Cash Flow Differences & Audit
+      </h1>
+      <div class="text-muted small mt-1">Physical cash drawer counting, system balance reconciliation, and discrepancy audit</div>
+    </div>
+    <button class="btn btn-warning btn-pill fw-bold" data-bs-toggle="modal" data-bs-target="#reconcileModal">
+      <i class="bi bi-calculator me-1"></i> New Physical Cash Audit
+    </button>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Current System Drawer Balance</div>
+        <div class="fs-3 fw-bold text-warning mt-1"><%= formatMoney(cashDrawerBalance) %></div>
+        <div class="text-muted small mt-1">Book balance calculated by ERP</div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Reconciliation Status</div>
+        <div class="fs-3 fw-bold text-success mt-1">
+          <i class="bi bi-shield-check me-1"></i> Audited
+        </div>
+        <div class="text-muted small mt-1">Verified with physical counting</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ui-card">
+    <div class="ui-card-header">
+      <h5 class="mb-0 fw-bold">Audit &amp; Reconciliation History</h5>
+    </div>
+    <div class="ui-card-body p-0">
+      <div class="table-responsive">
+        <table class="ui-table mb-0">
+          <thead>
+            <tr>
+              <th>Audit Ref</th>
+              <th>Date</th>
+              <th>Account</th>
+              <th class="text-end">System Book Balance</th>
+              <th class="text-end">Physical Counted Cash</th>
+              <th class="text-end">Difference (Rs.)</th>
+              <th class="text-center">Status</th>
+              <th>Auditor Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% reconciliations.forEach(r => { %>
+              <tr>
+                <td><strong><%= r.id %></strong></td>
+                <td><%= r.date %></td>
+                <td><%= r.accountName %></td>
+                <td class="text-end"><%= formatMoney(r.systemBalance) %></td>
+                <td class="text-end fw-bold"><%= formatMoney(r.physicalCash) %></td>
+                <td class="text-end fw-bold <%= r.difference === 0 ? 'text-success' : 'text-danger' %>">
+                  <%= r.difference > 0 ? '+' : '' %><%= formatMoney(r.difference) %>
+                </td>
+                <td class="text-center">
+                  <span class="badge <%= r.difference === 0 ? 'bg-success' : 'bg-warning' %> bg-opacity-25 <%= r.difference === 0 ? 'text-success' : 'text-warning' %>">
+                    <%= r.status %>
+                  </span>
+                </td>
+                <td class="text-muted small"><%= r.notes %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Reconcile Modal -->
+<div class="modal fade" id="reconcileModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background: var(--ui-surface); border: 1px solid var(--ui-border); color: var(--ui-text);">
+      <form action="/api/reconciliation" method="POST">
+        <div class="modal-header border-bottom border-secondary border-opacity-25">
+          <h5 class="modal-title fw-bold text-warning">
+            <i class="bi bi-calculator me-1"></i> Count Physical Cash in Drawer
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="p-3 mb-3 rounded" style="background: var(--ui-surface-2); border: 1px dashed var(--ui-border);">
+            <div class="text-muted small">Current System Book Balance:</div>
+            <div class="fw-bold fs-5 text-warning"><%= formatMoney(cashDrawerBalance) %></div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted">Physical Counted Cash Total (Rs.)</label>
+            <input type="number" name="physicalCash" class="form-control form-control-lg text-success fw-bold" placeholder="e.g. 385000" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted">Audit Remarks / Notes</label>
+            <textarea name="notes" class="form-control" rows="2" placeholder="Evening drawer count verified by manager..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer border-top border-secondary border-opacity-25">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning fw-bold">Submit Audit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,172 @@
+<div class="ui-v2">
+  <div class="ui-page-header">
+    <div>
+      <h1 class="ui-title">
+        <i class="bi bi-graph-up text-warning"></i> Stock Summary & Inventory
+      </h1>
+      <div class="text-muted small mt-1">Real-time inventory levels, intake, and valuation</div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-warning btn-pill fw-bold" data-bs-toggle="modal" data-bs-target="#grnModal">
+        <i class="bi bi-plus-circle me-1"></i> Stock In (GRN)
+      </button>
+      <a href="/materials" class="btn btn-outline-secondary btn-pill fw-bold">
+        <i class="bi bi-tags me-1"></i> Manage Brands
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary Metrics -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Total Stock on Hand</div>
+        <div class="fs-3 fw-bold text-warning mt-1"><%= formatNumber(totalStock) %></div>
+        <div class="text-muted small mt-1">Units (Bags, Tons, Cu.Ft)</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Lifetime Total Received</div>
+        <div class="fs-3 fw-bold text-success mt-1">+<%= formatNumber(totalIn) %></div>
+        <div class="text-muted small mt-1">All verified GRN shipments</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Lifetime Total Dispatched</div>
+        <div class="fs-3 fw-bold text-danger mt-1">−<%= formatNumber(totalOut) %></div>
+        <div class="text-muted small mt-1">Direct sales & booking dispatches</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Estimated Stock Valuation</div>
+        <div class="fs-3 fw-bold text-info mt-1"><%= formatMoney(stockValuation) %></div>
+        <div class="text-muted small mt-1">At average purchase cost</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Materials Stock Table -->
+  <div class="ui-card">
+    <div class="ui-card-header d-flex align-items-center justify-content-between">
+      <h5 class="mb-0 fw-bold">
+        <i class="bi bi-box-seam text-warning me-2"></i> Brand Inventory Breakdown
+      </h5>
+      <input type="text" id="stockFilter" class="form-control form-control-sm w-auto" placeholder="Filter materials...">
+    </div>
+    <div class="ui-card-body p-0">
+      <div class="table-responsive">
+        <table class="ui-table mb-0" id="stockTable">
+          <thead>
+            <tr>
+              <th>Material / Brand</th>
+              <th>Category</th>
+              <th class="text-center">Total In</th>
+              <th class="text-center">Total Out</th>
+              <th class="text-end">Current Stock</th>
+              <th class="text-end">Cost Rate</th>
+              <th class="text-end">Selling Rate</th>
+              <th class="text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% materials.forEach(m => { %>
+              <tr>
+                <td><strong><%= m.name %></strong></td>
+                <td><span class="badge bg-secondary bg-opacity-25 text-body"><%= m.category %></span></td>
+                <td class="text-center text-success fw-bold">+<%= formatNumber(m.in) %></td>
+                <td class="text-center text-danger fw-bold">−<%= formatNumber(m.out) %></td>
+                <td class="text-end fw-bold <%= m.stock < 300 ? 'text-danger' : 'text-warning' %>">
+                  <%= formatNumber(m.stock) %> <small class="text-muted"><%= m.unit %></small>
+                </td>
+                <td class="text-end text-muted"><%= formatMoney(m.purchaseRate) %></td>
+                <td class="text-end fw-bold"><%= formatMoney(m.rate) %></td>
+                <td class="text-center">
+                  <% if (m.stock > 500) { %>
+                    <span class="badge bg-success bg-opacity-25 text-success">Healthy</span>
+                  <% } else if (m.stock > 0) { %>
+                    <span class="badge bg-warning bg-opacity-25 text-warning">Low Stock</span>
+                  <% } else { %>
+                    <span class="badge bg-danger bg-opacity-25 text-danger">Out of Stock</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Stock In (GRN) Modal -->
+<div class="modal fade" id="grnModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background: var(--ui-surface); border: 1px solid var(--ui-border); color: var(--ui-text);">
+      <form action="/api/grn" method="POST">
+        <div class="modal-header border-bottom border-secondary border-opacity-25">
+          <h5 class="modal-title fw-bold text-warning">
+            <i class="bi bi-box-arrow-in-down me-1"></i> New Goods Receiving Note (GRN)
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small text-muted">Supplier</label>
+            <select name="supplierId" class="form-select" required>
+              <% suppliers.forEach(s => { %>
+                <option value="<%= s.id %>"><%= s.name %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted">Material / Brand</label>
+            <select name="materialId" class="form-select" required>
+              <% materials.forEach(m => { %>
+                <option value="<%= m.id %>"><%= m.name %> (<%= m.unit %>)</option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col">
+              <label class="form-label small text-muted">Quantity</label>
+              <input type="number" name="quantity" class="form-control" placeholder="e.g. 500" required min="1">
+            </div>
+            <div class="col">
+              <label class="form-label small text-muted">Purchase Rate (Rs.)</label>
+              <input type="number" name="purchaseRate" class="form-control" placeholder="Rate per unit" required>
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col">
+              <label class="form-label small text-muted">Vehicle No</label>
+              <input type="text" name="vehicleNo" class="form-control" placeholder="e.g. TK-4421">
+            </div>
+            <div class="col">
+              <label class="form-label small text-muted">Driver Name</label>
+              <input type="text" name="driver" class="form-control" placeholder="Driver">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-top border-secondary border-opacity-25">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning fw-bold">Post GRN Intake</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  const filter = document.getElementById('stockFilter');
+  if (filter) {
+    filter.addEventListener('input', function() {
+      const q = this.value.toLowerCase();
+      document.querySelectorAll('#stockTable tbody tr').forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+  }
+</script>

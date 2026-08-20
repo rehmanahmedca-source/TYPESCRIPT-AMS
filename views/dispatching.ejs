@@ -1,0 +1,73 @@
+<div class="ui-v2">
+  <div class="ui-page-header">
+    <div>
+      <h1 class="ui-title">
+        <i class="bi bi-truck text-warning"></i> Dispatch Tracking & Fleet Board
+      </h1>
+      <div class="text-muted small mt-1">Live yard dispatches, vehicles on road, and site delivery status</div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <a href="/delivery_persons" class="btn btn-outline-secondary btn-pill fw-bold">
+        <i class="bi bi-person-badge me-1"></i> Fleet & Drivers
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <% drivers.forEach(d => { %>
+      <div class="col-md-3">
+        <div class="ui-card p-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <span class="badge <%= d.status === 'Available' ? 'bg-success text-success' : 'bg-warning text-warning' %> bg-opacity-25">
+              <%= d.status %>
+            </span>
+            <i class="bi bi-truck fs-4 text-warning"></i>
+          </div>
+          <div class="fw-bold fs-5 mt-2"><%= d.name %></div>
+          <div class="text-muted small"><%= d.vehicle %></div>
+          <div class="text-muted small mt-1"><i class="bi bi-telephone me-1"></i> <%= d.phone %></div>
+        </div>
+      </div>
+    <% }); %>
+  </div>
+
+  <div class="ui-card">
+    <div class="ui-card-header">
+      <h5 class="mb-0 fw-bold">Dispatched Consignments & Tracking</h5>
+    </div>
+    <div class="ui-card-body p-0">
+      <div class="table-responsive">
+        <table class="ui-table mb-0">
+          <thead>
+            <tr>
+              <th>Invoice / Challan</th>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Material</th>
+              <th class="text-center">Quantity</th>
+              <th>Assigned Driver</th>
+              <th>Destination</th>
+              <th class="text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% sales.forEach(s => { %>
+              <tr>
+                <td><strong class="text-warning"><%= s.id %></strong></td>
+                <td><%= s.date %></td>
+                <td><strong><%= s.clientName %></strong></td>
+                <td><%= s.materialName %></td>
+                <td class="text-center fw-bold"><%= s.quantity %> <%= s.unit %></td>
+                <td><i class="bi bi-person me-1"></i> <%= s.driverName %></td>
+                <td class="text-muted"><i class="bi bi-geo-alt me-1"></i> <%= s.destination %></td>
+                <td class="text-center">
+                  <span class="badge bg-success bg-opacity-25 text-success"><%= s.status %></span>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

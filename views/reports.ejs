@@ -1,0 +1,80 @@
+<div class="ui-v2">
+  <div class="ui-page-header">
+    <div>
+      <h1 class="ui-title">
+        <i class="bi bi-file-earmark-bar-graph text-warning"></i> Reports & Business Analytics
+      </h1>
+      <div class="text-muted small mt-1">Sales volumes, cash recovery rates, credit exposures, and turnover</div>
+    </div>
+    <button class="btn btn-outline-secondary btn-pill fw-bold" onclick="window.print()">
+      <i class="bi bi-printer me-1"></i> Print Report
+    </button>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Total Sales Volume</div>
+        <div class="fs-3 fw-bold text-warning mt-1"><%= formatMoney(totalSalesVolume) %></div>
+        <div class="text-muted small mt-1">Invoiced materials</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Cash Realized</div>
+        <div class="fs-3 fw-bold text-success mt-1"><%= formatMoney(totalCashCollected) %></div>
+        <div class="text-muted small mt-1">Paid on sales</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Credit Extended</div>
+        <div class="fs-3 fw-bold text-danger mt-1"><%= formatMoney(totalCreditIssued) %></div>
+        <div class="text-muted small mt-1">Receivables outstanding</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="ui-card p-3">
+        <div class="text-muted small">Inventory Stock on Hand</div>
+        <div class="fs-3 fw-bold text-info mt-1"><%= formatNumber(totalInventoryUnits) %></div>
+        <div class="text-muted small mt-1">Total items in yard</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ui-card mb-4">
+    <div class="ui-card-header">
+      <h5 class="mb-0 fw-bold">Material Sales & Turnover Matrix</h5>
+    </div>
+    <div class="ui-card-body p-0">
+      <div class="table-responsive">
+        <table class="ui-table mb-0">
+          <thead>
+            <tr>
+              <th>Material</th>
+              <th>Category</th>
+              <th class="text-center">Total In</th>
+              <th class="text-center">Total Sold</th>
+              <th class="text-end">Current Stock</th>
+              <th class="text-end">Selling Price</th>
+              <th class="text-end">Potential Inventory Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% materials.forEach(m => { %>
+              <tr>
+                <td><strong><%= m.name %></strong></td>
+                <td><span class="badge bg-secondary bg-opacity-25 text-body"><%= m.category %></span></td>
+                <td class="text-center text-success">+<%= formatNumber(m.in) %></td>
+                <td class="text-center text-danger">−<%= formatNumber(m.out) %></td>
+                <td class="text-end fw-bold text-warning"><%= formatNumber(m.stock) %> <%= m.unit %></td>
+                <td class="text-end"><%= formatMoney(m.rate) %></td>
+                <td class="text-end fw-bold"><%= formatMoney(m.stock * m.rate) %></td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

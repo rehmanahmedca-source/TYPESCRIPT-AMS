@@ -1,0 +1,108 @@
+<div class="ui-v2">
+  <div class="ui-page-header">
+    <div>
+      <h1 class="ui-title">
+        <i class="bi bi-tags text-warning"></i> Brand Master & Material Catalog
+      </h1>
+      <div class="text-muted small mt-1">Configure brand names, categories, standard rates and units</div>
+    </div>
+    <button class="btn btn-warning btn-pill fw-bold" data-bs-toggle="modal" data-bs-target="#addBrandModal">
+      <i class="bi bi-plus-circle me-1"></i> Add New Brand
+    </button>
+  </div>
+
+  <div class="ui-card">
+    <div class="ui-card-header">
+      <h5 class="mb-0 fw-bold">Active Materials & Brands</h5>
+    </div>
+    <div class="ui-card-body p-0">
+      <div class="table-responsive">
+        <table class="ui-table mb-0">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Brand Name</th>
+              <th>Category</th>
+              <th>Unit</th>
+              <th class="text-end">Standard Purchase Rate</th>
+              <th class="text-end">Standard Selling Rate</th>
+              <th class="text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% materials.forEach(m => { %>
+              <tr>
+                <td>#<%= m.id %></td>
+                <td><strong><%= m.name %></strong></td>
+                <td><span class="badge bg-secondary bg-opacity-25 text-body"><%= m.category %></span></td>
+                <td><%= m.unit %></td>
+                <td class="text-end text-muted"><%= formatMoney(m.purchaseRate) %></td>
+                <td class="text-end fw-bold text-warning"><%= formatMoney(m.rate) %></td>
+                <td class="text-center">
+                  <span class="badge bg-success bg-opacity-25 text-success">Active</span>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Brand Modal -->
+<div class="modal fade" id="addBrandModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background: var(--ui-surface); border: 1px solid var(--ui-border); color: var(--ui-text);">
+      <form action="/api/materials" method="POST">
+        <div class="modal-header border-bottom border-secondary border-opacity-25">
+          <h5 class="modal-title fw-bold text-warning">
+            <i class="bi bi-tag-fill me-1"></i> Add Material / Brand
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small text-muted">Brand Name</label>
+            <input type="text" name="name" class="form-control" placeholder="e.g. Maple Leaf Cement" required>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col">
+              <label class="form-label small text-muted">Category</label>
+              <select name="category" class="form-select">
+                <option value="Cement">Cement</option>
+                <option value="Steel">Steel</option>
+                <option value="Aggregates">Aggregates / Sand</option>
+                <option value="Bricks">Bricks / Blocks</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="col">
+              <label class="form-label small text-muted">Unit of Measurement</label>
+              <select name="unit" class="form-select">
+                <option value="Bags">Bags</option>
+                <option value="Tons">Tons</option>
+                <option value="Cu.Ft">Cu.Ft</option>
+                <option value="Pieces">Pieces</option>
+              </select>
+            </div>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col">
+              <label class="form-label small text-muted">Purchase Rate (Rs.)</label>
+              <input type="number" name="purchaseRate" class="form-control" placeholder="1150">
+            </div>
+            <div class="col">
+              <label class="form-label small text-muted">Selling Rate (Rs.)</label>
+              <input type="number" name="rate" class="form-control" placeholder="1250">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-top border-secondary border-opacity-25">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning fw-bold">Save Brand</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
