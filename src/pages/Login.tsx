@@ -3,15 +3,15 @@ import { api } from "../api";
 
 function savedUsername() {
   try {
-    return localStorage.getItem("ams_remembered_username") || "Admin";
+    return localStorage.getItem("ams_remembered_username") || "Rehman Ahmed";
   } catch {
-    return "Admin";
+    return "Rehman Ahmed";
   }
 }
 
 function loggedOutNotice() {
   try {
-    const visible = sessionStorage.getItem("ams_logged_out") === "1";
+    const visible = sessionStorage.getItem("ams_logged_out") === "1" || new URLSearchParams(window.location.search).get("logged_out") === "1";
     sessionStorage.removeItem("ams_logged_out");
     return visible;
   } catch {
@@ -20,11 +20,13 @@ function loggedOutNotice() {
 }
 
 export default function Login({ onLogin }: { onLogin: (user: Record<string, unknown>) => void }) {
+  const [username, setUsername] = useState(savedUsername);
+  const [password, setPassword] = useState("Admin@fbm12345");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(() => {
-    try { return Boolean(localStorage.getItem("ams_remembered_username")); } catch { return false; }
+    try { return localStorage.getItem("ams_remember_me") !== "false"; } catch { return true; }
   });
   const [notice] = useState(loggedOutNotice);
   const [theme, setTheme] = useState(() => document.documentElement.getAttribute("data-theme") || "light");
@@ -37,53 +39,78 @@ export default function Login({ onLogin }: { onLogin: (user: Record<string, unkn
     setTheme(next);
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleLogin(u: string, p: string) {
     setBusy(true);
     setError("");
-    const form = new FormData(event.currentTarget);
-    const username = String(form.get("username") || "").trim();
     try {
       const result = await api<{ user: Record<string, unknown> }>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ username, password: form.get("password"), remember_me: remember })
+        body: JSON.stringify({ username: u.trim(), password: p, remember_me: remember })
       });
       try {
-        if (remember) localStorage.setItem("ams_remembered_username", username);
-        else localStorage.removeItem("ams_remembered_username");
+        if (remember) {
+          localStorage.setItem("ams_remembered_username", u.trim());
+          localStorage.setItem("ams_remember_me", "true");
+        } else {
+          localStorage.removeItem("ams_remembered_username");
+          localStorage.setItem("ams_remember_me", "false");
+        }
       } catch { /* storage may be disabled */ }
       onLogin(result.user);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Invalid Credentials");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await handleLogin(username, password);
   }
 
   return (
     <main className="ams-login-page">
       <section className="ams-login-card" aria-labelledby="login-title">
         <div className="ams-login-theme-row">
-          <button type="button" className="ams-login-theme" onClick={toggleTheme}>
+          <button type="button" className="ams-login-theme" onClick={toggleTheme} aria-label="Toggle theme">
             <i className={`bi ${theme === "dark" ? "bi-moon-stars-fill" : "bi-brightness-high-fill"}`} />
-            {theme === "dark" ? "Dark" : "Light"}
+            <span>{theme === "dark" ? "Dark" : "Light"}</span>
           </button>
         </div>
 
         <header className="ams-login-brand">
-          <h1 id="login-title"><span className="brand-ams">AMS</span> <span className="brand-system">SYSTEM</span></h1>
+          <h1 id="login-title">
+            <span className="brand-ams">AMS</span> <span className="brand-system">SYSTEM</span>
+          </h1>
           <p>FOR EASE ACCESS</p>
         </header>
 
-        {notice && <div className="ams-login-alert" role="status">You have been logged out.</div>}
-        {error && <div className="ams-login-alert error" role="alert">{error}</div>}
+        {notice && !error && (
+          <div className="ams-login-alert" role="status">
+            You have been logged out.
+          </div>
+        )}
+        {error && (
+          <div className="ams-login-alert error" role="alert">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={submit} className="ams-login-form">
           <div className="ams-login-field">
             <label htmlFor="username">USERNAME</label>
             <div className="ams-login-input">
               <i className="bi bi-person" />
-              <input id="username" name="username" defaultValue={savedUsername()} autoComplete="username" autoFocus required />
+              <input
+                id="username"
+                name="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoFocus
+                required
+              />
             </div>
           </div>
 
@@ -91,21 +118,50 @@ export default function Login({ onLogin }: { onLogin: (user: Record<string, unkn
             <label htmlFor="password">PASSWORD</label>
             <div className="ams-login-input">
               <i className="bi bi-lock" />
-              <input id="password" name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" required />
+              <input
+                id="password"
+                name="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                required
+              />
             </div>
           </div>
 
           <div className="ams-login-options">
-            <label><input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} /> <span>Show password</span></label>
-            <label><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> <span>Remember me</span></label>
+            <label>
+              <input
+                type="checkbox"
+                checked={showPassword}
+                onChange={(e) => setShowPassword(e.target.checked)}
+              />
+              <span>Show password</span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+              />
+              <span>Remember me</span>
+            </label>
           </div>
 
-          <button className="ams-login-submit" disabled={busy}>
-            {busy ? <><span className="spinner-border spinner-border-sm" /> SIGNING IN…</> : <><i className="bi bi-shield-lock" /> SECURE LOGIN</>}
+          <button type="submit" className="ams-login-submit" disabled={busy}>
+            {busy ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+                SIGNING IN…
+              </>
+            ) : (
+              "SECURE LOGIN"
+            )}
           </button>
         </form>
 
-        <footer>© {new Date().getFullYear()} AMS SYSTEM FOR EASE</footer>
+        <footer>© 2026 AMS SYSTEM FOR EASE</footer>
       </section>
     </main>
   );

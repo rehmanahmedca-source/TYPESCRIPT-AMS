@@ -1,7 +1,9 @@
 import { Router } from "express";
 import multer from "multer";
+import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
 import { all, db, one, run, tx } from "./db.ts";
-import { money, pkDate, pkNow, todayLabel, toMinor, ymd } from "./money.ts";
+import { money, pkDate, pkNow, pkTime, todayLabel, toMinor, ymd } from "./money.ts";
 import { nextAutoBill, normalizeManualBill, parseBillKind } from "./bills.ts";
 import {
   accountNet,
@@ -36,6 +38,18 @@ function actor(req: { authUser?: { username: string } }) {
   return req.authUser?.username || "system";
 }
 
+function logAudit(username: string, action: string, details?: string) {
+  try {
+    const id = crypto.randomUUID ? crypto.randomUUID() : `log-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    run(
+      `INSERT INTO audit_log (id, username, action, details, timestamp) VALUES (?, ?, ?, ?, ?)`,
+      [id, username, action, details || "", pkNow()]
+    );
+  } catch (e) {
+    console.error("Failed to log audit:", e);
+  }
+}
+
 /* ---------------- bootstrap / settings ---------------- */
 api.get("/bootstrap", (req, res) => {
   const settings = one("SELECT * FROM settings ORDER BY id LIMIT 1") || {};
@@ -49,6 +63,11 @@ api.get("/bootstrap", (req, res) => {
     today: todayLabel(),
     todayIso: pkDate()
   });
+});
+
+api.get("/settings", (_req, res) => {
+  const settings = one("SELECT * FROM settings ORDER BY id LIMIT 1") || {};
+  res.json({ ok: true, settings });
 });
 
 api.post("/settings", (req, res) => {
@@ -69,8 +88,519 @@ api.post("/settings", (req, res) => {
         existing.id
       ]
     );
+  } else {
+    run(
+      `INSERT INTO settings (company_name, company_address, company_phone, company_email, currency, tax_rate, ui_theme, allow_global_negative_stock)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        b.company_name || "",
+        b.company_address || "",
+        b.company_phone || "",
+        b.company_email || null,
+        b.currency || "PKR",
+        Number(b.tax_rate || 0),
+        b.ui_theme || "dark",
+        b.allow_global_negative_stock ? 1 : 0
+      ]
+    );
   }
+  logAudit(actor(req), "http.post.settings.update_general", "Updated general company settings");
   res.json({ ok: true, settings: one("SELECT * FROM settings ORDER BY id LIMIT 1") });
+});
+
+api.post(["/settings/password", "/settings/change-password", "/auth/change-password"], (req, res) => {
+  const { newPassword, password, targetUsername } = req.body || {};
+  const pass = String(newPassword || password || "").trim();
+  if (!pass || pass.length < 4) {
+    return res.status(400).json({ ok: false, error: "Password must be at least 4 characters long" });
+  }
+  const currentActor = actor(req);
+  const targetUser = (targetUsername ? String(targetUsername).trim() : currentActor) || currentActor;
+  const hash = bcrypt.hashSync(pass, 10);
+  run("UPDATE user SET password_hash = ? WHERE username = ? COLLATE NOCASE", [hash, targetUser]);
+  logAudit(currentActor, "http.post.auth.change_password", `Password updated for user ${targetUser}`);
+  res.json({ ok: true, message: `Password updated successfully for ${targetUser}` });
+});
+
+/* ---------------- Material Categories Management ---------------- */
+api.get(["/settings/categories", "/material_categories"], (_req, res) => {
+  const categories = all<AnyRow>(
+    `SELECT c.*, (SELECT COUNT(*) FROM material m WHERE m.category_id = c.id) AS materials_count
+       FROM material_category c
+      ORDER BY c.name COLLATE NOCASE ASC`
+  );
+  res.json({ ok: true, categories });
+});
+
+api.post(["/settings/categories", "/material_categories"], (req, res) => {
+  const { name } = req.body || {};
+  const catName = String(name || "").trim();
+  if (!catName) return res.status(400).json({ ok: false, error: "Category name is required" });
+  const existing = one<{ id: number }>("SELECT id FROM material_category WHERE name = ? COLLATE NOCASE", [catName]);
+  if (existing) {
+    return res.status(400).json({ ok: false, error: "A category with this name already exists" });
+  }
+  const info = run("INSERT INTO material_category (name, is_active, created_at) VALUES (?, 1, ?)", [catName, pkNow()]);
+  logAudit(actor(req), "http.post.masters.add_material_category", `Created category ${catName}`);
+  res.json({ ok: true, id: Number(info.lastInsertRowid), name: catName, is_active: 1 });
+});
+
+api.all(["/settings/categories/:id", "/material_categories/:id"], (req, res, next) => {
+  if (req.method !== "POST" && req.method !== "PUT" && req.method !== "PATCH") return next();
+  const id = Number(req.params.id);
+  const { name, is_active } = req.body || {};
+  const current = one<AnyRow>("SELECT * FROM material_category WHERE id = ?", [id]);
+  if (!current) return res.status(404).json({ ok: false, error: "Category not found" });
+
+  const newName = name !== undefined ? String(name).trim() : current.name;
+  if (!newName) return res.status(400).json({ ok: false, error: "Category name cannot be empty" });
+
+  const activeVal = is_active !== undefined ? (is_active ? 1 : 0) : Number(current.is_active || 1);
+  run("UPDATE material_category SET name = ?, is_active = ? WHERE id = ?", [newName, activeVal, id]);
+  logAudit(actor(req), "http.post.masters.update_material_category", `Updated category #${id} to ${newName} (Active: ${activeVal})`);
+  res.json({ ok: true, id, name: newName, is_active: activeVal });
+});
+
+api.post(["/settings/categories/:id/toggle", "/material_categories/:id/toggle"], (req, res) => {
+  const id = Number(req.params.id);
+  const current = one<AnyRow>("SELECT * FROM material_category WHERE id = ?", [id]);
+  if (!current) return res.status(404).json({ ok: false, error: "Category not found" });
+  const nextStatus = current.is_active ? 0 : 1;
+  run("UPDATE material_category SET is_active = ? WHERE id = ?", [nextStatus, id]);
+  logAudit(actor(req), "http.post.masters.toggle_material_category", `Toggled category #${id} ${current.name} to ${nextStatus ? 'Active' : 'Inactive'}`);
+  res.json({ ok: true, id, name: current.name, is_active: nextStatus });
+});
+
+/* ---------------- User Management & Permissions ---------------- */
+api.get(["/settings/users", "/users"], (_req, res) => {
+  const users = all<AnyRow>(
+    `SELECT id, username, role, status, created_at,
+            can_view_stock, can_view_daily, can_view_history, can_import_export,
+            can_manage_directory, can_view_dashboard, can_manage_grn, can_manage_bookings,
+            can_manage_payments, can_manage_sales, can_view_delivery_rent, can_manage_pending_bills,
+            can_view_reports, can_manage_notifications, can_view_client_ledger, can_view_supplier_ledger,
+            can_view_decision_ledger, can_manage_clients, can_manage_suppliers, can_manage_materials,
+            can_manage_delivery_persons, can_access_settings, restrict_backdated_edit,
+            can_manage_accounts, can_view_cash_flow
+       FROM user
+      ORDER BY id ASC`
+  );
+  res.json({ ok: true, users });
+});
+
+api.post(["/settings/users", "/users"], (req, res) => {
+  const b = req.body || {};
+  const username = String(b.username || "").trim();
+  const password = String(b.password || "").trim();
+  const role = String(b.role || "admin").toLowerCase() === "user" ? "user" : "admin";
+  const status = String(b.status || "active").toLowerCase() === "inactive" ? "inactive" : "active";
+
+  if (!username) return res.status(400).json({ ok: false, error: "Username is required" });
+  if (!password) return res.status(400).json({ ok: false, error: "Password is required" });
+
+  const existing = one<{ id: number }>("SELECT id FROM user WHERE username = ? COLLATE NOCASE", [username]);
+  if (existing) return res.status(400).json({ ok: false, error: "Username already exists" });
+
+  const hash = bcrypt.hashSync(password, 10);
+  const info = run(
+    `INSERT INTO user (
+      username, password_hash, role, status,
+      can_view_stock, can_view_daily, can_view_history, can_import_export,
+      can_manage_directory, can_view_dashboard, can_manage_grn, can_manage_bookings,
+      can_manage_payments, can_manage_sales, can_view_delivery_rent, can_manage_pending_bills,
+      can_view_reports, can_manage_notifications, can_view_client_ledger, can_view_supplier_ledger,
+      can_view_decision_ledger, can_manage_clients, can_manage_suppliers, can_manage_materials,
+      can_manage_delivery_persons, can_access_settings, restrict_backdated_edit,
+      can_manage_accounts, can_view_cash_flow, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      username,
+      hash,
+      role,
+      status,
+      b.can_view_stock ? 1 : 0,
+      b.can_view_daily ? 1 : 0,
+      b.can_view_history ? 1 : 0,
+      b.can_import_export ? 1 : 0,
+      b.can_manage_directory ? 1 : 0,
+      b.can_view_dashboard !== undefined ? (b.can_view_dashboard ? 1 : 0) : 1,
+      b.can_manage_grn ? 1 : 0,
+      b.can_manage_bookings ? 1 : 0,
+      b.can_manage_payments ? 1 : 0,
+      b.can_manage_sales ? 1 : 0,
+      b.can_view_delivery_rent ? 1 : 0,
+      b.can_manage_pending_bills ? 1 : 0,
+      b.can_view_reports ? 1 : 0,
+      b.can_manage_notifications ? 1 : 0,
+      b.can_view_client_ledger ? 1 : 0,
+      b.can_view_supplier_ledger ? 1 : 0,
+      b.can_view_decision_ledger ? 1 : 0,
+      b.can_manage_clients ? 1 : 0,
+      b.can_manage_suppliers ? 1 : 0,
+      b.can_manage_materials ? 1 : 0,
+      b.can_manage_delivery_persons ? 1 : 0,
+      b.can_access_settings ? 1 : 0,
+      b.restrict_backdated_edit ? 1 : 0,
+      b.can_manage_accounts ? 1 : 0,
+      b.can_view_cash_flow ? 1 : 0,
+      pkNow()
+    ]
+  );
+  logAudit(actor(req), "http.post.users.create_user", `Created user ${username} with role ${role}`);
+  res.json({ ok: true, id: Number(info.lastInsertRowid), username, role, status });
+});
+
+api.all(["/settings/users/:id", "/users/:id"], (req, res, next) => {
+  if (req.method !== "POST" && req.method !== "PUT" && req.method !== "PATCH") return next();
+  const id = Number(req.params.id);
+  const user = one<AnyRow>("SELECT * FROM user WHERE id = ?", [id]);
+  if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+
+  const b = req.body || {};
+  const role = b.role ? (String(b.role).toLowerCase() === "user" ? "user" : "admin") : user.role;
+  const status = b.status ? (String(b.status).toLowerCase() === "inactive" ? "inactive" : "active") : user.status;
+
+  let hash = user.password_hash;
+  if (b.password && String(b.password).trim().length >= 4) {
+    hash = bcrypt.hashSync(String(b.password).trim(), 10);
+  }
+
+  run(
+    `UPDATE user SET
+      role = ?,
+      status = ?,
+      password_hash = ?,
+      can_view_stock = ?,
+      can_view_daily = ?,
+      can_view_history = ?,
+      can_import_export = ?,
+      can_manage_directory = ?,
+      can_view_dashboard = ?,
+      can_manage_grn = ?,
+      can_manage_bookings = ?,
+      can_manage_payments = ?,
+      can_manage_sales = ?,
+      can_view_delivery_rent = ?,
+      can_manage_pending_bills = ?,
+      can_view_reports = ?,
+      can_manage_notifications = ?,
+      can_view_client_ledger = ?,
+      can_view_supplier_ledger = ?,
+      can_view_decision_ledger = ?,
+      can_manage_clients = ?,
+      can_manage_suppliers = ?,
+      can_manage_materials = ?,
+      can_manage_delivery_persons = ?,
+      can_access_settings = ?,
+      restrict_backdated_edit = ?,
+      can_manage_accounts = ?,
+      can_view_cash_flow = ?
+     WHERE id = ?`,
+    [
+      role,
+      status,
+      hash,
+      b.can_view_stock !== undefined ? (b.can_view_stock ? 1 : 0) : user.can_view_stock,
+      b.can_view_daily !== undefined ? (b.can_view_daily ? 1 : 0) : user.can_view_daily,
+      b.can_view_history !== undefined ? (b.can_view_history ? 1 : 0) : user.can_view_history,
+      b.can_import_export !== undefined ? (b.can_import_export ? 1 : 0) : user.can_import_export,
+      b.can_manage_directory !== undefined ? (b.can_manage_directory ? 1 : 0) : user.can_manage_directory,
+      b.can_view_dashboard !== undefined ? (b.can_view_dashboard ? 1 : 0) : user.can_view_dashboard,
+      b.can_manage_grn !== undefined ? (b.can_manage_grn ? 1 : 0) : user.can_manage_grn,
+      b.can_manage_bookings !== undefined ? (b.can_manage_bookings ? 1 : 0) : user.can_manage_bookings,
+      b.can_manage_payments !== undefined ? (b.can_manage_payments ? 1 : 0) : user.can_manage_payments,
+      b.can_manage_sales !== undefined ? (b.can_manage_sales ? 1 : 0) : user.can_manage_sales,
+      b.can_view_delivery_rent !== undefined ? (b.can_view_delivery_rent ? 1 : 0) : user.can_view_delivery_rent,
+      b.can_manage_pending_bills !== undefined ? (b.can_manage_pending_bills ? 1 : 0) : user.can_manage_pending_bills,
+      b.can_view_reports !== undefined ? (b.can_view_reports ? 1 : 0) : user.can_view_reports,
+      b.can_manage_notifications !== undefined ? (b.can_manage_notifications ? 1 : 0) : user.can_manage_notifications,
+      b.can_view_client_ledger !== undefined ? (b.can_view_client_ledger ? 1 : 0) : user.can_view_client_ledger,
+      b.can_view_supplier_ledger !== undefined ? (b.can_view_supplier_ledger ? 1 : 0) : user.can_view_supplier_ledger,
+      b.can_view_decision_ledger !== undefined ? (b.can_view_decision_ledger ? 1 : 0) : user.can_view_decision_ledger,
+      b.can_manage_clients !== undefined ? (b.can_manage_clients ? 1 : 0) : user.can_manage_clients,
+      b.can_manage_suppliers !== undefined ? (b.can_manage_suppliers ? 1 : 0) : user.can_manage_suppliers,
+      b.can_manage_materials !== undefined ? (b.can_manage_materials ? 1 : 0) : user.can_manage_materials,
+      b.can_manage_delivery_persons !== undefined ? (b.can_manage_delivery_persons ? 1 : 0) : user.can_manage_delivery_persons,
+      b.can_access_settings !== undefined ? (b.can_access_settings ? 1 : 0) : user.can_access_settings,
+      b.restrict_backdated_edit !== undefined ? (b.restrict_backdated_edit ? 1 : 0) : user.restrict_backdated_edit,
+      b.can_manage_accounts !== undefined ? (b.can_manage_accounts ? 1 : 0) : user.can_manage_accounts,
+      b.can_view_cash_flow !== undefined ? (b.can_view_cash_flow ? 1 : 0) : user.can_view_cash_flow,
+      id
+    ]
+  );
+  logAudit(actor(req), "http.post.users.update_user", `Updated user #${id} ${user.username}`);
+  res.json({ ok: true, id, username: user.username });
+});
+
+api.post(["/settings/users/:id/toggle", "/users/:id/toggle"], (req, res) => {
+  const id = Number(req.params.id);
+  const user = one<AnyRow>("SELECT * FROM user WHERE id = ?", [id]);
+  if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+  if (user.username === "Admin") {
+    return res.status(400).json({ ok: false, error: "Cannot suspend built-in root Admin" });
+  }
+  const nextStatus = user.status === "active" ? "inactive" : "active";
+  run("UPDATE user SET status = ? WHERE id = ?", [nextStatus, id]);
+  logAudit(actor(req), "http.post.users.toggle_status", `Changed status of user #${id} ${user.username} to ${nextStatus}`);
+  res.json({ ok: true, id, username: user.username, status: nextStatus });
+});
+
+api.delete(["/settings/users/:id", "/users/:id"], (req, res) => {
+  const id = Number(req.params.id);
+  const user = one<AnyRow>("SELECT * FROM user WHERE id = ?", [id]);
+  if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+  if (user.username === "Admin") {
+    return res.status(400).json({ ok: false, error: "Cannot delete built-in root Admin" });
+  }
+  run("DELETE FROM user WHERE id = ?", [id]);
+  logAudit(actor(req), "http.post.users.delete_user", `Deleted user #${id} ${user.username}`);
+  res.json({ ok: true, id, message: "User deleted" });
+});
+
+/* ---------------- Audit Logs & Live Sessions ---------------- */
+api.get("/settings/audit-logs", (_req, res) => {
+  const logs = all<AnyRow>("SELECT * FROM audit_log ORDER BY timestamp DESC, id DESC LIMIT 50");
+  const sessions = all<AnyRow>(
+    `SELECT s.*, u.username, u.role
+       FROM user_login_session s
+       JOIN user u ON u.id = s.user_id
+      ORDER BY s.last_seen_at DESC, s.id DESC LIMIT 30`
+  );
+  res.json({ ok: true, logs, sessions });
+});
+
+/* ---------------- Data Reconciliation ---------------- */
+api.post("/settings/reconciliation/scan", (_req, res) => {
+  // Check orphaned entries, mismatched totals, void consistency
+  const unlinkedEntries = all<AnyRow>(
+    `SELECT e.id, e.material, e.type, e.qty, e.source_table, e.source_id
+       FROM entry e
+      WHERE e.source_table IS NOT NULL AND e.source_id IS NOT NULL AND e.is_void = 0
+        AND (
+          (e.source_table = 'direct_sale' AND NOT EXISTS (SELECT 1 FROM direct_sale s WHERE s.id = e.source_id AND s.is_void = 0)) OR
+          (e.source_table = 'grn' AND NOT EXISTS (SELECT 1 FROM grn g WHERE g.id = e.source_id AND g.is_void = 0)) OR
+          (e.source_table = 'material_return' AND NOT EXISTS (SELECT 1 FROM material_return r WHERE r.id = e.source_id AND r.is_void = 0))
+        )`
+  );
+
+  const pendingBillsDiscrepancies = all<AnyRow>(
+    `SELECT pb.id, pb.bill_no, pb.amount, pb.source_table, pb.source_id
+       FROM pending_bill pb
+      WHERE pb.is_void = 0 AND pb.source_table IS NOT NULL AND pb.source_id IS NOT NULL
+        AND (
+          (pb.source_table = 'direct_sale' AND NOT EXISTS (SELECT 1 FROM direct_sale s WHERE s.id = pb.source_id AND s.is_void = 0)) OR
+          (pb.source_table = 'booking' AND NOT EXISTS (SELECT 1 FROM booking b WHERE b.id = pb.source_id AND b.is_void = 0))
+        )`
+  );
+
+  const totalEntries = one<{ n: number }>("SELECT COUNT(*) AS n FROM entry")?.n || 0;
+  const totalSales = one<{ n: number }>("SELECT COUNT(*) AS n FROM direct_sale")?.n || 0;
+  const totalBookings = one<{ n: number }>("SELECT COUNT(*) AS n FROM booking")?.n || 0;
+  const totalPayments = one<{ n: number }>("SELECT COUNT(*) AS n FROM payment")?.n || 0;
+  const totalGrns = one<{ n: number }>("SELECT COUNT(*) AS n FROM grn")?.n || 0;
+  const totalPendingBills = one<{ n: number }>("SELECT COUNT(*) AS n FROM pending_bill")?.n || 0;
+  const totalDeliveryRents = one<{ n: number }>("SELECT COUNT(*) AS n FROM delivery_rent")?.n || 0;
+
+  const totalScanned = totalEntries + totalSales + totalBookings + totalPayments + totalGrns + totalPendingBills + totalDeliveryRents;
+  const discrepanciesCount = unlinkedEntries.length + pendingBillsDiscrepancies.length;
+
+  res.json({
+    ok: true,
+    scanned: totalScanned,
+    discrepanciesCount,
+    details: {
+      unlinkedEntries: unlinkedEntries.length,
+      pendingBillsDiscrepancies: pendingBillsDiscrepancies.length,
+      totalEntries,
+      totalSales,
+      totalBookings,
+      totalPayments,
+      totalGrns,
+      totalPendingBills,
+      totalDeliveryRents
+    },
+    message: discrepanciesCount === 0
+      ? `Data scan clean! Checked ${totalScanned} records across Entries, Sales, Bookings, Payments, GRNs, Pending Bills, and Delivery Rent.`
+      : `Found ${discrepanciesCount} consistency issues across ${totalScanned} scanned records.`
+  });
+});
+
+api.post("/settings/reconciliation/fix", (req, res) => {
+  let fixedCount = 0;
+  tx(() => {
+    // 1. Fix void status sync between direct_sale and entries
+    const voidSales = all<AnyRow>("SELECT id FROM direct_sale WHERE is_void = 1");
+    for (const s of voidSales) {
+      const info = run("UPDATE entry SET is_void = 1 WHERE source_table = 'direct_sale' AND source_id = ? AND is_void = 0", [s.id]);
+      fixedCount += Number(info.changes || 0);
+      const pbInfo = run("UPDATE pending_bill SET is_void = 1 WHERE source_table = 'direct_sale' AND source_id = ? AND is_void = 0", [s.id]);
+      fixedCount += Number(pbInfo.changes || 0);
+    }
+
+    // 2. Fix void status sync between grn and entries
+    const voidGrns = all<AnyRow>("SELECT id FROM grn WHERE is_void = 1");
+    for (const g of voidGrns) {
+      const info = run("UPDATE entry SET is_void = 1 WHERE source_table = 'grn' AND source_id = ? AND is_void = 0", [g.id]);
+      fixedCount += Number(info.changes || 0);
+    }
+
+    // 3. Fix void status sync between booking and pending bills
+    const voidBookings = all<AnyRow>("SELECT id FROM booking WHERE is_void = 1");
+    for (const b of voidBookings) {
+      const info = run("UPDATE pending_bill SET is_void = 1 WHERE source_table = 'booking' AND source_id = ? AND is_void = 0", [b.id]);
+      fixedCount += Number(info.changes || 0);
+    }
+
+    // 4. Fix void status sync between material_return and entries
+    const voidReturns = all<AnyRow>("SELECT id FROM material_return WHERE is_void = 1");
+    for (const r of voidReturns) {
+      const info = run("UPDATE entry SET is_void = 1 WHERE source_table = 'material_return' AND source_id = ? AND is_void = 0", [r.id]);
+      fixedCount += Number(info.changes || 0);
+    }
+  });
+
+  logAudit(actor(req), "http.post.maintenance.reconciliation_fix", `Ran reconciliation auto-fix. Repaired ${fixedCount} linked records.`);
+  res.json({
+    ok: true,
+    fixedCount,
+    message: `Auto-fix completed successfully. Synchronized and repaired ${fixedCount} records.`
+  });
+});
+
+/* ---------------- Granular Data Wipe ---------------- */
+api.post("/settings/wipe", (req, res) => {
+  const { datasets } = req.body || {};
+  if (!Array.isArray(datasets) || datasets.length === 0) {
+    return res.status(400).json({ ok: false, error: "Please select at least one dataset to wipe" });
+  }
+
+  const selected = new Set(datasets.map((s: string) => String(s).toLowerCase().trim()));
+  const wipedTables: string[] = [];
+
+  tx(() => {
+    if (selected.has("clients")) {
+      run("DELETE FROM client");
+      wipedTables.push("client");
+    }
+    if (selected.has("suppliers")) {
+      run("DELETE FROM supplier");
+      wipedTables.push("supplier");
+    }
+    if (selected.has("supplier_payments") || selected.has("supplierpayments")) {
+      run("DELETE FROM supplier_payment");
+      wipedTables.push("supplier_payment");
+    }
+    if (selected.has("pending_bills") || selected.has("pendingbills")) {
+      run("DELETE FROM pending_bill");
+      wipedTables.push("pending_bill");
+    }
+    if (selected.has("notifications_data") || selected.has("notifications")) {
+      run("DELETE FROM notification");
+      wipedTables.push("notification");
+    }
+    if (selected.has("dispatch") || selected.has("dispatch_out")) {
+      run("DELETE FROM entry WHERE type = 'OUT'");
+      wipedTables.push("entry (OUT)");
+    }
+    if (selected.has("receive") || selected.has("receive_in")) {
+      run("DELETE FROM entry WHERE type = 'IN'");
+      wipedTables.push("entry (IN)");
+    }
+    if (selected.has("grn")) {
+      run("DELETE FROM grn_allocation");
+      run("DELETE FROM grn_item");
+      run("DELETE FROM grn");
+      run("DELETE FROM entry WHERE source_table = 'grn'");
+      wipedTables.push("grn");
+    }
+    if (selected.has("materials")) {
+      run("DELETE FROM material");
+      wipedTables.push("material");
+    }
+    if (selected.has("material_categories") || selected.has("materialcategories")) {
+      run("DELETE FROM material_category");
+      wipedTables.push("material_category");
+    }
+    if (selected.has("direct_sales") || selected.has("directsales")) {
+      run("DELETE FROM direct_sale_item");
+      run("DELETE FROM direct_sale");
+      run("DELETE FROM entry WHERE source_table = 'direct_sale'");
+      wipedTables.push("direct_sale");
+    }
+    if (selected.has("material_returns") || selected.has("materialreturns")) {
+      run("DELETE FROM material_return_item");
+      run("DELETE FROM material_return");
+      run("DELETE FROM entry WHERE source_table = 'material_return'");
+      wipedTables.push("material_return");
+    }
+    if (selected.has("delivery_rents") || selected.has("deliveryrents")) {
+      run("DELETE FROM delivery_rent");
+      wipedTables.push("delivery_rent");
+    }
+    if (selected.has("delivery_persons") || selected.has("deliverypersons")) {
+      run("DELETE FROM delivery_person");
+      wipedTables.push("delivery_person");
+    }
+    if (selected.has("invoices")) {
+      run("DELETE FROM invoice_item");
+      run("DELETE FROM invoice");
+      wipedTables.push("invoice");
+    }
+    if (selected.has("payments")) {
+      run("DELETE FROM payment");
+      run("DELETE FROM waive_off");
+      wipedTables.push("payment");
+    }
+    if (selected.has("bookings")) {
+      run("DELETE FROM booking_item");
+      run("DELETE FROM booking");
+      run("DELETE FROM entry WHERE source_table = 'booking'");
+      wipedTables.push("booking");
+    }
+    if (selected.has("financial_accounts") || selected.has("accounts")) {
+      run("DELETE FROM account_transaction");
+      run("DELETE FROM account");
+      wipedTables.push("account");
+    }
+    if (selected.has("account_categories") || selected.has("accountcategories")) {
+      run("DELETE FROM account_category");
+      wipedTables.push("account_category");
+    }
+    if (selected.has("account_transactions") || selected.has("accounttransactions")) {
+      run("DELETE FROM account_transaction");
+      wipedTables.push("account_transaction");
+    }
+    if (selected.has("cash_reconciliation_data") || selected.has("reconciliations")) {
+      run("DELETE FROM account_reconciliation");
+      wipedTables.push("account_reconciliation");
+    }
+    if (selected.has("cash_audit_trail") || selected.has("cash_flow_entry_audit")) {
+      run("DELETE FROM cash_flow_entry_audit");
+      wipedTables.push("cash_flow_entry_audit");
+    }
+    if (selected.has("driver_payments") || selected.has("driverpayments")) {
+      run("DELETE FROM driver_payment");
+      wipedTables.push("driver_payment");
+    }
+    if (selected.has("unsaved_sales_drafts") || selected.has("drafts")) {
+      try { run("DELETE FROM draft_sales_cart"); } catch {}
+      wipedTables.push("drafts");
+    }
+
+    // Record wipe history
+    run(
+      `INSERT INTO tenant_wipe_backup_history (tenant_name, performed_by, targets, wipe_status, note, created_at)
+       VALUES (?, ?, ?, 'COMPLETED', ?, ?)`,
+      ["AMS Main Yard", actor(req), Array.from(selected).join(", "), `Wiped ${wipedTables.length} datasets safely`, pkNow()]
+    );
+  });
+
+  logAudit(actor(req), "http.post.maintenance.granular_wipe", `Granular wipe performed for: ${wipedTables.join(", ")}`);
+  res.json({
+    ok: true,
+    wipedTables,
+    message: `Granular wipe completed successfully for ${wipedTables.length} datasets.`
+  });
 });
 
 /* ---------------- dashboard ---------------- */

@@ -5,9 +5,11 @@ import { pkNow, toMinor } from "./money.ts";
 
 export function seedIfEmpty(db: Database) {
   const userCount = (db.prepare("SELECT COUNT(*) AS n FROM user").get() as { n: number }).n;
+  const username = (process.env.DEFAULT_ADMIN_USER || "Admin").trim() || "Admin";
+  const password = (process.env.DEFAULT_ADMIN_PASSWORD || "Admin@fbm12345").trim();
+  const now = pkNow();
+
   if (userCount === 0) {
-    const username = (process.env.DEFAULT_ADMIN_USER || "Admin").trim() || "Admin";
-    const password = (process.env.DEFAULT_ADMIN_PASSWORD || "Admin@fbm12345").trim();
     db.prepare(
       `INSERT INTO user (
         username, password_hash, role, status,
@@ -16,9 +18,177 @@ export function seedIfEmpty(db: Database) {
         can_manage_payments, can_manage_sales, can_view_delivery_rent, can_manage_pending_bills,
         can_view_reports, can_manage_notifications, can_view_client_ledger, can_view_supplier_ledger,
         can_view_decision_ledger, can_manage_clients, can_manage_suppliers, can_manage_materials,
-        can_manage_delivery_persons, can_access_settings, created_at
-      ) VALUES (?, ?, 'admin', 'active', 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1, ?)`
-    ).run(username, bcrypt.hashSync(password, 10), pkNow());
+        can_manage_delivery_persons, can_access_settings, restrict_backdated_edit,
+        can_manage_accounts, can_view_cash_flow, created_at
+      ) VALUES (?, ?, 'admin', 'active', 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1, 0, 1, 1, ?)`
+    ).run(username, bcrypt.hashSync(password, 10), now);
+  }
+
+  // Seed managers/users if only 1 user exists
+  const countAfter = (db.prepare("SELECT COUNT(*) AS n FROM user").get() as { n: number }).n;
+  if (countAfter <= 1) {
+    const extraUsers = [
+      {
+        username: "Rehman Ahmed",
+        role: "admin",
+        status: "active",
+        perms: {
+          can_view_dashboard: 1, can_manage_grn: 1, can_view_stock: 1, can_view_daily: 1, can_view_history: 1,
+          can_manage_bookings: 1, can_manage_payments: 1, can_manage_sales: 1, can_view_delivery_rent: 1,
+          can_view_client_ledger: 1, can_view_supplier_ledger: 1, can_view_decision_ledger: 1,
+          can_manage_pending_bills: 1, can_view_reports: 1, can_manage_notifications: 1,
+          can_import_export: 0, can_manage_clients: 0, can_manage_suppliers: 0, can_manage_materials: 0,
+          can_manage_delivery_persons: 0, can_access_settings: 0, restrict_backdated_edit: 0,
+          can_manage_accounts: 0, can_view_cash_flow: 0
+        }
+      },
+      {
+        username: "Rizwan Ahmed",
+        role: "admin",
+        status: "active",
+        perms: {
+          can_view_dashboard: 1, can_manage_grn: 1, can_view_stock: 1, can_view_daily: 1, can_view_history: 1,
+          can_manage_bookings: 1, can_manage_payments: 1, can_manage_sales: 1, can_view_delivery_rent: 1,
+          can_view_client_ledger: 1, can_view_supplier_ledger: 1, can_view_decision_ledger: 1,
+          can_manage_pending_bills: 1, can_view_reports: 1, can_manage_notifications: 1,
+          can_import_export: 1, can_manage_clients: 1, can_manage_suppliers: 1, can_manage_materials: 1,
+          can_manage_delivery_persons: 1, can_access_settings: 1, restrict_backdated_edit: 1,
+          can_manage_accounts: 0, can_view_cash_flow: 0
+        }
+      },
+      {
+        username: "Adnan Ahmed",
+        role: "admin",
+        status: "active",
+        perms: {
+          can_view_dashboard: 1, can_manage_grn: 1, can_view_stock: 1, can_view_daily: 1, can_view_history: 1,
+          can_manage_bookings: 1, can_manage_payments: 1, can_manage_sales: 1, can_view_delivery_rent: 1,
+          can_view_client_ledger: 1, can_view_supplier_ledger: 1, can_view_decision_ledger: 1,
+          can_manage_pending_bills: 1, can_view_reports: 1, can_manage_notifications: 1,
+          can_import_export: 1, can_manage_clients: 1, can_manage_suppliers: 1, can_manage_materials: 1,
+          can_manage_delivery_persons: 1, can_access_settings: 1, restrict_backdated_edit: 1,
+          can_manage_accounts: 0, can_view_cash_flow: 0
+        }
+      },
+      {
+        username: "Shujaat Muzaffar",
+        role: "admin",
+        status: "active",
+        perms: {
+          can_view_dashboard: 1, can_manage_grn: 1, can_view_stock: 1, can_view_daily: 1, can_view_history: 1,
+          can_manage_bookings: 1, can_manage_payments: 1, can_manage_sales: 1, can_view_delivery_rent: 1,
+          can_view_client_ledger: 1, can_view_supplier_ledger: 1, can_view_decision_ledger: 1,
+          can_manage_pending_bills: 1, can_view_reports: 1, can_manage_notifications: 1,
+          can_import_export: 1, can_manage_clients: 1, can_manage_suppliers: 1, can_manage_materials: 1,
+          can_manage_delivery_persons: 1, can_access_settings: 1, restrict_backdated_edit: 1,
+          can_manage_accounts: 0, can_view_cash_flow: 0
+        }
+      },
+      {
+        username: "Ahmed Hassan",
+        role: "admin",
+        status: "inactive",
+        perms: {
+          can_view_dashboard: 1, can_manage_grn: 1, can_view_stock: 0, can_view_daily: 0, can_view_history: 0,
+          can_manage_bookings: 0, can_manage_payments: 1, can_manage_sales: 0, can_view_delivery_rent: 0,
+          can_view_client_ledger: 0, can_view_supplier_ledger: 1, can_view_decision_ledger: 0,
+          can_manage_pending_bills: 0, can_view_reports: 0, can_manage_notifications: 1,
+          can_import_export: 0, can_manage_clients: 0, can_manage_suppliers: 1, can_manage_materials: 0,
+          can_manage_delivery_persons: 0, can_access_settings: 0, restrict_backdated_edit: 1,
+          can_manage_accounts: 0, can_view_cash_flow: 0
+        }
+      },
+      {
+        username: "Mohsan Javed",
+        role: "user",
+        status: "active",
+        perms: {
+          can_view_dashboard: 1, can_manage_grn: 0, can_view_stock: 1, can_view_daily: 1, can_view_history: 1,
+          can_manage_bookings: 1, can_manage_payments: 1, can_manage_sales: 1, can_view_delivery_rent: 1,
+          can_view_client_ledger: 1, can_view_supplier_ledger: 0, can_view_decision_ledger: 1,
+          can_manage_pending_bills: 1, can_view_reports: 1, can_manage_notifications: 0,
+          can_import_export: 0, can_manage_clients: 0, can_manage_suppliers: 0, can_manage_materials: 0,
+          can_manage_delivery_persons: 0, can_access_settings: 0, restrict_backdated_edit: 0,
+          can_manage_accounts: 0, can_view_cash_flow: 0
+        }
+      }
+    ];
+
+    const insertUserStmt = db.prepare(
+      `INSERT INTO user (
+        username, password_hash, role, status,
+        can_view_stock, can_view_daily, can_view_history, can_import_export,
+        can_manage_directory, can_view_dashboard, can_manage_grn, can_manage_bookings,
+        can_manage_payments, can_manage_sales, can_view_delivery_rent, can_manage_pending_bills,
+        can_view_reports, can_manage_notifications, can_view_client_ledger, can_view_supplier_ledger,
+        can_view_decision_ledger, can_manage_clients, can_manage_suppliers, can_manage_materials,
+        can_manage_delivery_persons, can_access_settings, restrict_backdated_edit,
+        can_manage_accounts, can_view_cash_flow, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    for (const u of extraUsers) {
+      insertUserStmt.run(
+        u.username,
+        bcrypt.hashSync("Admin@fbm12345", 10),
+        u.role,
+        u.status,
+        u.perms.can_view_stock,
+        u.perms.can_view_daily,
+        u.perms.can_view_history,
+        u.perms.can_import_export,
+        0,
+        u.perms.can_view_dashboard,
+        u.perms.can_manage_grn,
+        u.perms.can_manage_bookings,
+        u.perms.can_manage_payments,
+        u.perms.can_manage_sales,
+        u.perms.can_view_delivery_rent,
+        u.perms.can_manage_pending_bills,
+        u.perms.can_view_reports,
+        u.perms.can_manage_notifications,
+        u.perms.can_view_client_ledger,
+        u.perms.can_view_supplier_ledger,
+        u.perms.can_view_decision_ledger,
+        u.perms.can_manage_clients,
+        u.perms.can_manage_suppliers,
+        u.perms.can_manage_materials,
+        u.perms.can_manage_delivery_persons,
+        u.perms.can_access_settings,
+        u.perms.restrict_backdated_edit,
+        u.perms.can_manage_accounts,
+        u.perms.can_view_cash_flow,
+        now
+      );
+    }
+  }
+
+  // Seed default categories if missing
+  const allInitialCats = [
+    "BRICKS", "CEMENT", "CHAUGATH", "CHIPS", "CRUSH",
+    "General", "MARBLE", "OTHERS", "RENT", "STEEL"
+  ];
+  for (const catName of allInitialCats) {
+    const existing = db.prepare("SELECT id FROM material_category WHERE name = ? COLLATE NOCASE").get(catName);
+    if (!existing) {
+      db.prepare("INSERT INTO material_category (name, is_active, created_at) VALUES (?, 1, ?)").run(catName, now);
+    }
+  }
+
+  // Seed initial audit log items
+  const auditCount = (db.prepare("SELECT COUNT(*) AS n FROM audit_log").get() as { n: number }).n;
+  if (auditCount === 0) {
+    const insertAudit = db.prepare("INSERT INTO audit_log (id, username, action, details, timestamp) VALUES (?, ?, ?, ?, ?)");
+    const logItems = [
+      ["http.post.accounts.client_payment_save", "Payment saved for client CL-001 Rs. 50,000", "2026-08-20 13:50:12"],
+      ["http.post.accounts.add_transaction", "Internal cash transfer to Bank Account", "2026-08-20 13:49:05"],
+      ["http.post.accounts.add_transaction", "Expense recorded for Yard Diesel Rs. 12,000", "2026-08-20 13:48:44"],
+      ["http.post.masters.add_client", "New client registered: Royal Heights Project", "2026-08-20 13:47:19"],
+      ["http.post.sales.create_sale", "Direct sale #SL-1002 generated", "2026-08-20 13:30:00"]
+    ];
+    for (const [action, details, stamp] of logItems) {
+      insertAudit.run(crypto.randomUUID ? crypto.randomUUID() : `log-${Date.now()}-${Math.random()}`, "Shujaat Muzaffar", action, details, stamp);
+    }
   }
 
   const settingsCount = (db.prepare("SELECT COUNT(*) AS n FROM settings").get() as { n: number }).n;
@@ -32,7 +202,6 @@ export function seedIfEmpty(db: Database) {
   const materialCount = (db.prepare("SELECT COUNT(*) AS n FROM material").get() as { n: number }).n;
   if (materialCount > 0) return;
 
-  const now = pkNow();
   const cats = ["Cement", "Steel", "Aggregates", "General"];
   const insertCat = db.prepare(
     "INSERT INTO material_category (name, is_active, created_at) VALUES (?, 1, ?)"

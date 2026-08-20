@@ -43,7 +43,15 @@ export default function App() {
   const [boot, setBoot] = useState<Boot>({ today: "", user: {} });
 
   async function loadApplication(user?: Record<string, unknown>, signal?: AbortSignal) {
-    const me = user || (await api<{ user: Record<string, unknown> }>("/auth/me", { signal })).user;
+    let me = user;
+    if (!me) {
+      const authRes = await api<{ ok: boolean; authenticated?: boolean; user?: Record<string, unknown> }>("/auth/me", { signal });
+      if (!authRes.authenticated || !authRes.user) {
+        setAuthUser(null);
+        return;
+      }
+      me = authRes.user;
+    }
     const bootData = await api<Boot>("/bootstrap", { signal });
     setBoot(bootData);
     setAuthUser(me);
