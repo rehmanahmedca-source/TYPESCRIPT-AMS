@@ -1,6 +1,10 @@
 import { Router } from "express";
 import multer from "multer";
-import { all, db, one, run, tx } from "./db.ts";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import bcrypt from "bcryptjs";
+import { all, db, dbPath, one, run, tx } from "./db.ts";
 import { money, pkDate, pkNow, todayLabel, toMinor, ymd } from "./money.ts";
 import { nextAutoBill, normalizeManualBill, parseBillKind } from "./bills.ts";
 import {
@@ -27,6 +31,10 @@ import {
   setBookingVoid,
   updateBooking
 } from "./bookingsCore.ts";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const root = path.resolve(__dirname, "..");
 
 const maxUploadMb = Math.max(1, Number(process.env.MAX_UPLOAD_MB || 256));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: maxUploadMb * 1024 * 1024 } });
@@ -1899,4 +1907,367 @@ api.post("/import", upload.single("file"), async (req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+/* ---------------- settings : security (login history) ---------------- */
+api.get("/security/login-history", (req, res) => {
+  const limit = Math.min(200, Math.max(10, Number(req.query.limit || 80)));
+  const sessions = all<AnyRow>(
+    `SELECT s.id, s.sid, s.user_id, s.username, s.role, s.ip, s.user_agent,
+            s.created_at, s.last_seen_at, s.ended_at,
+            CASE WHEN s.ended_at IS NULL THEN 'Active' ELSE 'Ended' END AS state
+       FROM user_login_session s
+       ORDER BY s.id DESC LIMIT ?`,
+    [limit]
+  );
+  const today = pkDate();
+  const todayCount = all<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM user_login_session WHERE substr(created_at,1,10) = ?",
+    [today]
+  )[0]?.n || 0;
+  const activeCount = all<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM user_login_session WHERE ended_at IS NULL"
+  )[0]?.n || 0;
+  const totalCount = all<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM user_login_session"
+  )[0]?.n || 0;
+  res.json({ sessions, activeCount, todayCount, totalCount });
+});
+
+api.post("/security/live-login", (req, res) => {
+  const username = String(req.body?.username || "").trim();
+  if (!username) return res.status(400).json({ ok: false, error: "username is required" });
+  const existing = one<AnyRow>("SELECT id, role FROM user WHERE lower(trim(username)) = lower(?) LIMIT 1", [username]);
+  if (!existing) return res.status(404).json({ ok: false, error: "User not found" });
+  res.json({
+    ok: true,
+    message: `Live login refreshed for ${username}`,
+    user: existing,
+    timestamp: pkNow()
+  });
+});
+
+/* ---------------- settings : backup / restore ---------------- */
+api.get("/backup/info", (_req, res) => {
+  let size = 0;
+  try {
+    size = Number(fs.statSync(dbPath).size);
+  } catch {
+    /* ignore */
+  }
+  const backupDir = path.join(root, "instance", "backups");
+  let backupFiles: { name: string; size: number; mtime: string }[] = [];
+  try {
+    fs.mkdirSync(backupDir, { recursive: true });
+    backupFiles = fs
+      .readdirSync(backupDir)
+      .filter((name) => name.toLowerCase().endsWith(".db") || name.toLowerCase().endsWith(".sqlite"))
+      .map((name) => {
+        const filePath = path.join(backupDir, name);
+        const stat = fs.statSync(filePath);
+        return { name, size: Number(stat.size), mtime: stat.mtime.toISOString() };
+      })
+      .sort((a, b) => b.mtime.localeCompare(a.mtime))
+      .slice(0, 20);
+  } catch {
+    /* ignore */
+  }
+  res.json({
+    dbPath,
+    dbSize: size,
+    backupDir,
+    backups: backupFiles,
+    createdAt: pkNow()
+  });
+});
+
+api.post("/backup/db", (_req, res) => {
+  try {
+    const backupDir = path.join(root, "instance", "backups");
+    fs.mkdirSync(backupDir, { recursive: true });
+    const stamp = new Date()
+      .toLocaleString("sv-SE", { timeZone: "Asia/Karachi" })
+      .replace(/[T:]/g, "-")
+      .replace(/\s+/g, "_")
+      .slice(0, 19);
+    const dest = path.join(backupDir, `ahmed_cement_${stamp}.db`);
+    fs.copyFileSync(dbPath, dest);
+    const stat = fs.statSync(dest);
+    res.json({
+      ok: true,
+      filename: path.basename(dest),
+      size: Number(stat.size),
+      createdAt: pkNow()
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+api.post("/backup/restore", upload.single("file"), (req, res) => {
+  if (!req.file) return res.status(400).json({ ok: false, error: "Choose a .db file to restore" });
+  try {
+    const safeName = String(req.file.originalname || "restore.db").replace(/[^\w.\-]/g, "_");
+    const stagingDir = path.join(root, "instance", "backups");
+    fs.mkdirSync(stagingDir, { recursive: true });
+    const staged = path.join(stagingDir, `staged_${Date.now()}_${safeName}`);
+    fs.writeFileSync(staged, req.file.buffer);
+    fs.copyFileSync(staged, dbPath);
+    fs.unlinkSync(staged);
+    res.json({ ok: true, message: "Database restored from uploaded backup", restoredFrom: safeName, appliedAt: pkNow() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/* ---------------- settings : data reconciliation ---------------- */
+api.get("/reconciliation/scan", (_req, res) => {
+  const salesWithoutItems = all<{ n: number; id: number }>(
+    "SELECT COUNT(*) AS n, MIN(id) AS id FROM direct_sale WHERE is_void = 0 AND id NOT IN (SELECT DISTINCT sale_id FROM direct_sale_item)"
+  );
+  const bookingsWithoutItems = all<{ n: number; id: number }>(
+    "SELECT COUNT(*) AS n, MIN(id) AS id FROM booking WHERE is_void = 0 AND id NOT IN (SELECT DISTINCT booking_id FROM booking_item)"
+  );
+  const orphanedPayments = all<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM payment p
+     LEFT JOIN client c ON c.id = p.client_id
+     WHERE p.is_void = 0 AND (p.client_id IS NULL OR (c.id IS NULL AND trim(coalesce(p.client_name,'')) = ''))`
+  );
+  const orphanedEntries = all<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM entry e
+     WHERE e.is_void = 0
+       AND ((e.source_table IS NOT NULL AND e.source_id IS NOT NULL)
+            AND NOT EXISTS (SELECT 1 FROM direct_sale s WHERE e.source_table='direct_sale' AND s.id=e.source_id)
+            AND NOT EXISTS (SELECT 1 FROM grn g WHERE e.source_table='grn' AND g.id=e.source_id)
+            AND NOT EXISTS (SELECT 1 FROM material_return r WHERE e.source_table='material_return' AND r.id=e.source_id)
+            AND NOT EXISTS (SELECT 1 FROM booking b WHERE e.source_table='booking' AND b.id=e.source_id))`
+  );
+  const paymentAccountsMissing = all<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM payment p
+     LEFT JOIN account a ON a.id = p.payment_account_id
+     WHERE p.is_void = 0 AND p.payment_account_id IS NOT NULL AND a.id IS NULL`
+  );
+  const negativeStock = all<AnyRow>(
+    `SELECT material, SUM(CASE WHEN type='IN' THEN qty ELSE 0 END) - SUM(CASE WHEN type='OUT' THEN qty ELSE 0 END) AS bal
+       FROM entry WHERE is_void = 0 GROUP BY material`
+  ).filter((row) => Number(row.bal || 0) < 0);
+  const totalIssues =
+    Number(salesWithoutItems[0]?.n || 0) +
+    Number(bookingsWithoutItems[0]?.n || 0) +
+    Number(orphanedPayments[0]?.n || 0) +
+    Number(orphanedEntries[0]?.n || 0) +
+    Number(paymentAccountsMissing[0]?.n || 0) +
+    negativeStock.length;
+  res.json({
+    issues: {
+      salesWithoutItems: Number(salesWithoutItems[0]?.n || 0),
+      bookingsWithoutItems: Number(bookingsWithoutItems[0]?.n || 0),
+      orphanedPayments: Number(orphanedPayments[0]?.n || 0),
+      orphanedEntries: Number(orphanedEntries[0]?.n || 0),
+      paymentAccountsMissing: Number(paymentAccountsMissing[0]?.n || 0),
+      negativeStock: negativeStock.length
+    },
+    negativeStockMaterials: negativeStock.map((row) => ({ material: row.material, balance: Number(row.bal) })),
+    totalIssues,
+    scannedAt: pkNow()
+  });
+});
+
+api.post("/reconciliation/purge/:kind", (req, res) => {
+  const kind = String(req.params.kind || "");
+  let purged = 0;
+  try {
+    tx(() => {
+      if (kind === "sales-without-items") {
+        const result = run(
+          "UPDATE direct_sale SET is_void = 1 WHERE is_void = 0 AND id NOT IN (SELECT DISTINCT sale_id FROM direct_sale_item)"
+        );
+        purged = Number(result.changes || 0);
+      } else if (kind === "bookings-without-items") {
+        const result = run(
+          "UPDATE booking SET is_void = 1 WHERE is_void = 0 AND id NOT IN (SELECT DISTINCT booking_id FROM booking_item)"
+        );
+        purged = Number(result.changes || 0);
+      } else if (kind === "orphaned-payments") {
+        const result = run(
+          `UPDATE payment SET is_void = 1
+           WHERE is_void = 0 AND (client_id IS NULL OR (client_id IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM client c WHERE c.id = payment.client_id)
+             AND trim(coalesce(client_name,'')) = ''))`
+        );
+        purged = Number(result.changes || 0);
+      } else if (kind === "orphaned-entries") {
+        const result = run(
+          `UPDATE entry SET is_void = 1
+           WHERE is_void = 0
+             AND source_table IS NOT NULL AND source_id IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM direct_sale s WHERE source_table='direct_sale' AND s.id=source_id)
+             AND NOT EXISTS (SELECT 1 FROM grn g WHERE source_table='grn' AND g.id=source_id)
+             AND NOT EXISTS (SELECT 1 FROM material_return r WHERE source_table='material_return' AND r.id=source_id)
+             AND NOT EXISTS (SELECT 1 FROM booking b WHERE source_table='booking' AND b.id=source_id)`
+        );
+        purged = Number(result.changes || 0);
+      } else if (kind === "payment-accounts-missing") {
+        const result = run(
+          `UPDATE payment SET payment_account_id = NULL
+           WHERE payment_account_id IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM account a WHERE a.id = payment.payment_account_id)`
+        );
+        purged = Number(result.changes || 0);
+      } else {
+        throw new Error("Unknown reconciliation kind");
+      }
+    });
+    res.json({ ok: true, kind, purged, completedAt: pkNow() });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/* ---------------- settings : material categories ---------------- */
+api.get("/material-categories", (_req, res) => {
+  const cats = all<AnyRow>(
+    `SELECT c.id, c.name, c.is_active, c.created_at,
+            COALESCE(m.cnt, 0) AS materials_count,
+            COALESCE(m.total_stock, 0) AS total_stock
+       FROM material_category c
+       LEFT JOIN (
+         SELECT category_id,
+                COUNT(*) AS cnt,
+                SUM(CASE WHEN e.bal IS NULL THEN 0 ELSE e.bal END) AS total_stock
+           FROM material
+           LEFT JOIN (
+             SELECT material, SUM(CASE WHEN type='IN' THEN qty ELSE -qty END) AS bal
+               FROM entry WHERE is_void = 0 GROUP BY material
+           ) e ON e.material = material.name
+          GROUP BY category_id
+       ) m ON m.category_id = c.id
+       ORDER BY c.is_active DESC, c.name`
+  );
+  res.json({ categories: cats });
+});
+
+api.post("/material-categories", (req, res) => {
+  const b = req.body || {};
+  const name = String(b.name || "").trim();
+  if (!name) return res.status(400).json({ ok: false, error: "Category name is required" });
+  const exists = one<AnyRow>("SELECT id FROM material_category WHERE lower(trim(name)) = lower(?)", [name]);
+  if (exists) return res.status(400).json({ ok: false, error: "Category already exists" });
+  const info = run(
+    "INSERT INTO material_category (name, is_active, created_at) VALUES (?, ?, ?)",
+    [name, b.is_active === false ? 0 : 1, pkNow()]
+  );
+  res.json({ ok: true, id: Number(info.lastInsertRowid), name });
+});
+
+api.post("/material-categories/:id", (req, res) => {
+  const b = req.body || {};
+  const name = String(b.name || "").trim();
+  if (!name) return res.status(400).json({ ok: false, error: "Category name is required" });
+  const duplicate = one<AnyRow>(
+    "SELECT id FROM material_category WHERE lower(trim(name)) = lower(?) AND id != ?",
+    [name, req.params.id]
+  );
+  if (duplicate) return res.status(400).json({ ok: false, error: "Another category already uses that name" });
+  run(
+    "UPDATE material_category SET name = ?, is_active = ? WHERE id = ?",
+    [name, b.is_active === false ? 0 : 1, req.params.id]
+  );
+  res.json({ ok: true });
+});
+
+api.post("/material-categories/:id/toggle", (req, res) => {
+  const cat = one<AnyRow>("SELECT id, is_active FROM material_category WHERE id = ?", [req.params.id]);
+  if (!cat) return res.status(404).json({ ok: false, error: "Category not found" });
+  const next = cat.is_active ? 0 : 1;
+  run("UPDATE material_category SET is_active = ? WHERE id = ?", [next, cat.id]);
+  res.json({ ok: true, is_active: next });
+});
+
+/* ---------------- settings : users + permissions ---------------- */
+const PERMISSION_COLUMNS = [
+  "can_view_stock",
+  "can_view_daily",
+  "can_view_history",
+  "can_import_export",
+  "can_manage_directory",
+  "can_view_dashboard",
+  "can_manage_grn",
+  "can_manage_bookings",
+  "can_manage_payments",
+  "can_manage_sales",
+  "can_view_delivery_rent",
+  "can_manage_pending_bills",
+  "can_view_reports",
+  "can_manage_notifications",
+  "can_view_client_ledger",
+  "can_view_supplier_ledger",
+  "can_view_decision_ledger",
+  "can_manage_clients",
+  "can_manage_suppliers",
+  "can_manage_materials",
+  "can_manage_delivery_persons",
+  "can_access_settings",
+  "can_manage_accounts",
+  "can_view_cash_flow"
+];
+
+api.get("/users", (_req, res) => {
+  const users = all<AnyRow>(
+    `SELECT id, username, role, status, can_view_stock, can_view_daily, can_view_history,
+            can_import_export, can_manage_directory, can_view_dashboard, can_manage_grn,
+            can_manage_bookings, can_manage_payments, can_manage_sales, can_view_delivery_rent,
+            can_manage_pending_bills, can_view_reports, can_manage_notifications,
+            can_view_client_ledger, can_view_supplier_ledger, can_view_decision_ledger,
+            can_manage_clients, can_manage_suppliers, can_manage_materials,
+            can_manage_delivery_persons, can_access_settings, can_manage_accounts,
+            can_view_cash_flow, created_at
+       FROM user ORDER BY id`
+  );
+  const active = users.filter((u) => Number(u.status === "active" || u.status === 1 || u.status === "1")).length;
+  const admins = users.filter((u) => String(u.role || "").toLowerCase() === "admin").length;
+  res.json({ users, active, admins, total: users.length });
+});
+
+api.post("/users/:id", (req, res) => {
+  const b = req.body || {};
+  const user = one<AnyRow>("SELECT id, role FROM user WHERE id = ?", [req.params.id]);
+  if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+  const allowedColumns = ["username", "role", "status"];
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  for (const key of allowedColumns) {
+    if (b[key] !== undefined) {
+      sets.push(`${key} = ?`);
+      params.push(String(b[key]));
+    }
+  }
+  for (const col of PERMISSION_COLUMNS) {
+    if (b[col] !== undefined) {
+      sets.push(`${col} = ?`);
+      params.push(b[col] ? 1 : 0);
+    }
+  }
+  if (!sets.length) return res.json({ ok: true });
+  params.push(user.id);
+  run(`UPDATE user SET ${sets.join(", ")} WHERE id = ?`, params);
+  res.json({ ok: true });
+});
+
+api.post("/users/:id/toggle-active", (req, res) => {
+  const user = one<AnyRow>("SELECT id, status FROM user WHERE id = ?", [req.params.id]);
+  if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+  const isActive = String(user.status || "").toLowerCase() === "active";
+  const next = isActive ? "inactive" : "active";
+  run("UPDATE user SET status = ? WHERE id = ?", [next, user.id]);
+  res.json({ ok: true, status: next });
+});
+
+api.post("/users/:id/reset-password", (req, res) => {
+  const user = one<AnyRow>("SELECT id, username FROM user WHERE id = ?", [req.params.id]);
+  if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+  const newPassword = String(req.body?.password || "").trim() || `Reset#${Math.random().toString(36).slice(2, 8)}`;
+  const hash = bcrypt.hashSync(newPassword, 10);
+  run("UPDATE user SET password_hash = ?, password_plain = NULL WHERE id = ?", [hash, user.id]);
+  res.json({ ok: true, password: newPassword });
 });
