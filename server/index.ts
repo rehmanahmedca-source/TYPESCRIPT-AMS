@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import cookieParser from "cookie-parser";
 import { api } from "./routes.ts";
+import { attachAuth, authApi, enforcePermission, requireAuth } from "./auth.ts";
 import "./db.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -18,16 +19,11 @@ app.use(cookieParser());
 app.use(express.json({ limit: "12mb" }));
 app.use(express.urlencoded({ extended: true, limit: "12mb" }));
 
-app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  if (req.method === "OPTIONS") return res.sendStatus(204);
-  next();
-});
-
-app.use("/api", api);
+// AMS99 is a same-origin, cookie-authenticated application. Never reflect an
+// arbitrary Origin while credentials are enabled.
+app.use(attachAuth);
+app.use("/api/auth", authApi);
+app.use("/api", requireAuth, enforcePermission, api);
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, app: "AMS ERP", runtime: "typescript" });

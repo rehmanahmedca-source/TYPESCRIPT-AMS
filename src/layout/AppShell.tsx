@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { api } from "../api";
 
 const NAV = [
   { to: "/", icon: "bi-speedometer2", label: "Dashboard", end: true },
@@ -49,6 +50,14 @@ export default function AppShell({
     setOpen(false);
   }, [location.pathname]);
 
+  async function logout() {
+    try {
+      await api("/auth/logout", { method: "POST" });
+    } finally {
+      window.dispatchEvent(new CustomEvent("ams:unauthorized"));
+    }
+  }
+
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", next);
@@ -96,7 +105,12 @@ export default function AppShell({
             <i className="bi bi-shield-check text-success" />
             <span>{user.username || "Admin"}</span>
           </div>
-          <span className="badge bg-warning text-dark">{(user.role || "admin").toUpperCase()}</span>
+          <div className="d-flex align-items-center gap-2">
+            <span className="badge bg-warning text-dark">{(user.role || "user").toUpperCase()}</span>
+            <button type="button" className="btn btn-sm btn-outline-danger" onClick={logout} title="Logout" aria-label="Logout">
+              <i className="bi bi-box-arrow-right" />
+            </button>
+          </div>
         </div>
       </aside>
 

@@ -30,8 +30,21 @@ CREATE TABLE account_category (
 	name VARCHAR(100) NOT NULL, 
 	note VARCHAR(300), 
 	is_active BOOLEAN, 
-	created_at DATETIME, 
+	created_at DATETIME,
 	PRIMARY KEY (id)
+);
+
+CREATE TABLE cash_flow_entry_audit (
+	id INTEGER NOT NULL,
+	entry_id INTEGER NOT NULL,
+	action VARCHAR(20) NOT NULL,
+	before_json TEXT,
+	after_json TEXT,
+	reason VARCHAR(300),
+	changed_by VARCHAR(80),
+	changed_at DATETIME,
+	PRIMARY KEY (id),
+	FOREIGN KEY(entry_id) REFERENCES cash_flow_entry (id)
 );
 
 CREATE TABLE account_reconciliation (
@@ -208,6 +221,8 @@ CREATE TABLE cash_flow_category (
 	is_active BOOLEAN, 
 	sort_order INTEGER, 
 	created_at DATETIME, 
+	notes VARCHAR(200),
+	updated_at DATETIME,
 	PRIMARY KEY (id)
 );
 
@@ -247,9 +262,22 @@ CREATE TABLE cash_flow_entry (
 	created_by VARCHAR(80), 
 	account_tx_id INTEGER, 
 	is_void BOOLEAN, 
-	created_at DATETIME, 
+	created_at DATETIME,
+	amount_minor BIGINT,
+	destination_account_id INTEGER,
+	reference VARCHAR(200),
+	updated_by VARCHAR(200),
+	source_type VARCHAR(200),
+	source_id INTEGER,
+	voided_at DATETIME,
+	voided_by VARCHAR(200),
+	void_reason VARCHAR(200),
+	idempotency_key VARCHAR(200),
+	revision INTEGER,
+	updated_at DATETIME,
 	PRIMARY KEY (id), 
-	FOREIGN KEY(account_id) REFERENCES account (id), 
+	FOREIGN KEY(account_id) REFERENCES account (id),
+	FOREIGN KEY(destination_account_id) REFERENCES account (id),
 	FOREIGN KEY(category_id) REFERENCES cash_flow_category (id), 
 	FOREIGN KEY(subcategory_id) REFERENCES cash_flow_subcategory (id), 
 	FOREIGN KEY(party_id) REFERENCES cash_flow_party (id), 
@@ -263,7 +291,8 @@ CREATE TABLE cash_flow_party (
 	phone VARCHAR(40), 
 	note VARCHAR(300), 
 	is_active BOOLEAN, 
-	created_at DATETIME, 
+	created_at DATETIME,
+	updated_at DATETIME,
 	PRIMARY KEY (id)
 );
 
@@ -289,7 +318,9 @@ CREATE TABLE cash_flow_subcategory (
 	category_id INTEGER NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
 	is_active BOOLEAN, 
-	created_at DATETIME, 
+	created_at DATETIME,
+	notes VARCHAR(200),
+	updated_at DATETIME,
 	PRIMARY KEY (id), 
 	FOREIGN KEY(category_id) REFERENCES cash_flow_category (id)
 );
@@ -1031,7 +1062,9 @@ CREATE TABLE user (
 	can_manage_delivery_persons BOOLEAN, 
 	can_access_settings BOOLEAN, 
 	restrict_backdated_edit BOOLEAN, 
-	created_at DATETIME, 
+	created_at DATETIME,
+	can_manage_accounts INTEGER,
+	can_view_cash_flow INTEGER,
 	PRIMARY KEY (id)
 );
 
