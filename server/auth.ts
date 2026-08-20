@@ -87,10 +87,16 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 
 const PERMISSION_BY_PREFIX: Array<[string, string]> = [
   ["/settings", "can_access_settings"],
+  ["/security", "can_access_settings"],
+  ["/backup", "can_access_settings"],
+  ["/material-categories", "can_manage_materials"],
+  ["/users", "can_access_settings"],
   ["/import", "can_import_export"],
   ["/export", "can_import_export"],
   ["/accounts", "can_manage_accounts"],
   ["/cash-flow", "can_view_cash_flow"],
+  ["/reconciliation/scan", "can_access_settings"],
+  ["/reconciliation/purge", "can_access_settings"],
   ["/reconciliation", "can_view_cash_flow"],
   ["/materials", "can_manage_materials"],
   ["/daily", "can_view_daily"],
