@@ -13,8 +13,8 @@ export default function Dispatch() {
     clients?: { id: number; name: string; code: string }[];
     materials?: { id: number; name: string }[];
   }>("/dispatch");
-  const clientsApi = useApi<{ clients: { id: number; name: string; code: string }[] }>("/clients");
-  const matsApi = useApi<{ materials: { id: number; name: string }[] }>("/materials");
+  const clientsApi = useApi<{ clients: { id: number; name: string; code: string }[] }>(data?.clients ? null : "/clients");
+  const matsApi = useApi<{ materials: { id: number; name: string }[] }>(data?.materials ? null : "/materials");
   const [err, setErr] = useState("");
   const [hasBill, setHasBill] = useState(true);
 
@@ -45,8 +45,8 @@ export default function Dispatch() {
     }
   }
 
-  const clients = clientsApi.data?.clients || [];
-  const materials = matsApi.data?.materials || [];
+  const clients = data?.clients || clientsApi.data?.clients || [];
+  const materials = data?.materials || matsApi.data?.materials || [];
 
   return (
     <div>

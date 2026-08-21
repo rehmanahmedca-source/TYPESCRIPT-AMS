@@ -17,8 +17,8 @@ const PORT = Number(process.env.PORT || 3000);
 
 app.disable("x-powered-by");
 app.use(cookieParser());
-app.use(express.json({ limit: "12mb" }));
-app.use(express.urlencoded({ extended: true, limit: "12mb" }));
+app.use(express.json({ limit: "256mb" }));
+app.use(express.urlencoded({ extended: true, limit: "256mb" }));
 
 // AMS99 is a same-origin, cookie-authenticated application. Never reflect an
 // arbitrary Origin while credentials are enabled.

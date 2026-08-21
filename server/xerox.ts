@@ -26,6 +26,15 @@ import {
   updateManualCashFlow,
   voidManualCashFlow
 } from "./cashFlowCore.ts";
+import {
+  deleteImportReports,
+  importReportFile,
+  listImportReports,
+  readCfPrefs,
+  writeCfPrefs
+} from "./opsExtras.ts";
+import fs from "node:fs";
+import path from "node:path";
 
 export const xeroxApi = Router();
 
@@ -612,6 +621,43 @@ xeroxApi.post("/notifications/emails", (req, res) => {
   res.json({ ok: true });
 });
 
+xeroxApi.post("/notifications/delete_email/:id", (req, res) => {
+  run("DELETE FROM staff_email WHERE id = ?", [req.params.id]);
+  res.json({ ok: true });
+});
+
+xeroxApi.post("/notifications/toggle_email/:id", (req, res) => {
+  const row = one<AnyRow>("SELECT * FROM staff_email WHERE id = ?", [req.params.id]);
+  if (!row) return res.status(404).json({ error: "Not found" });
+  run("UPDATE staff_email SET is_active = ? WHERE id = ?", [row.is_active ? 0 : 1, row.id]);
+  res.json({ ok: true });
+});
+
+xeroxApi.post("/notifications/set_severity/:billId", (req, res) => {
+  run("UPDATE pending_bill SET risk_override = ? WHERE id = ?", [req.body?.severity || req.body?.risk || "Medium", req.params.billId]);
+  res.json({ ok: true });
+});
+
+xeroxApi.post("/notifications/set_reminder/:billId", (req, res) => {
+  const remindAt = String(req.body?.remind_at || req.body?.date || "").trim();
+  if (!remindAt) return res.status(400).json({ error: "Reminder time is required" });
+  run(
+    `INSERT INTO follow_up_reminder (pending_bill_id, remind_at, note, is_done, created_at) VALUES (?, ?, ?, 0, ?)`,
+    [req.params.billId, remindAt, req.body?.note || null, pkNow()]
+  );
+  res.json({ ok: true });
+});
+
+xeroxApi.post("/notifications/ack_reminder/:id", (req, res) => {
+  run("UPDATE follow_up_reminder SET acknowledged_at = ? WHERE id = ?", [pkNow(), req.params.id]);
+  res.json({ ok: true });
+});
+
+xeroxApi.post("/notifications/close_reminder/:id", (req, res) => {
+  run("UPDATE follow_up_reminder SET is_done = 1 WHERE id = ?", [req.params.id]);
+  res.json({ ok: true });
+});
+
 xeroxApi.get("/drivers/:id/ledger", (req, res) => {
   const driver = one<AnyRow>("SELECT * FROM delivery_person WHERE id = ?", [req.params.id]);
   if (!driver) return res.status(404).json({ error: "Driver not found" });
@@ -825,6 +871,24 @@ xeroxApi.post(["/cash-flow", "/cash_flow"], (req, res) => {
       if (rec) run("DELETE FROM cash_flow_difference_adjustment WHERE id = ?", [rec.id]);
       return res.json({ ok: true });
     }
+    if (action === "set_opening_override") {
+      const prefs = readCfPrefs();
+      prefs.today_opening_override = { date: pkDate(), amount: money(b.today_opening_override) };
+      writeCfPrefs(prefs);
+      return res.json({ ok: true, today_opening_override: prefs.today_opening_override.amount });
+    }
+    if (action === "clear_opening_override") {
+      const prefs = readCfPrefs();
+      delete prefs.today_opening_override;
+      writeCfPrefs(prefs);
+      return res.json({ ok: true });
+    }
+    if (action === "reset_fresh_start") {
+      writeCfPrefs({
+        fresh_start_cutoff: { date: pkDate(), at: pkNow() }
+      });
+      return res.json({ ok: true });
+    }
     return res.status(400).json({ error: `Unknown action ${action}` });
   } catch (e) {
     return res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
@@ -1016,6 +1080,30 @@ xeroxApi.get("/direct_sales/hold", (_req, res) => {
   res.json({ drafts: all("SELECT * FROM direct_sale_draft ORDER BY id DESC LIMIT 100") });
 });
 
+xeroxApi.get("/direct_sales/hold/:id", (req, res) => {
+  const draft = one<AnyRow>("SELECT * FROM direct_sale_draft WHERE id = ?", [req.params.id]);
+  if (!draft) return res.status(404).json({ error: "Draft not found" });
+  let payload: AnyRow = {};
+  try {
+    payload = JSON.parse(String(draft.payload || "{}"));
+  } catch {
+    payload = {};
+  }
+  res.json({ draft, payload: { ...payload, draft_id: draft.id } });
+});
+
+xeroxApi.post("/direct_sales/hold/:id/resume", (req, res) => {
+  const draft = one<AnyRow>("SELECT * FROM direct_sale_draft WHERE id = ?", [req.params.id]);
+  if (!draft) return res.status(404).json({ error: "Draft not found" });
+  let payload: AnyRow = {};
+  try {
+    payload = JSON.parse(String(draft.payload || "{}"));
+  } catch {
+    payload = {};
+  }
+  res.json({ ok: true, draft, payload: { ...payload, draft_id: draft.id } });
+});
+
 xeroxApi.post("/direct_sales/hold", (req, res) => {
   const b = req.body || {};
   const payload = JSON.stringify(b.payload || b);
@@ -1129,28 +1217,47 @@ xeroxApi.get("/data_lab/basket", (_req, res) => {
 });
 
 xeroxApi.get(["/import_export/full_raw_import_history", "/import-export/history"], (_req, res) => {
+  const fileReports = listImportReports();
   const jobs = all<AnyRow>(
     `SELECT j.*, u.filename AS source_file FROM import_job j
      LEFT JOIN import_upload u ON u.id = j.upload_id
      ORDER BY j.id DESC LIMIT 200`
   );
-  res.json({
-    reports: jobs.map((j) => ({
-      name: `job-${j.id}`,
-      created_at: j.started_at || j.created_at,
-      mode: "full_raw",
-      tenant_name: "AMS Main Yard",
-      status: j.status,
-      inserted: 0,
-      updated: 0,
-      skipped: 0,
-      failed: 0,
-      warnings: 0,
-      tables: j.current_sheet || "",
-      source_file: j.source_file || "",
-      row_count: j.processed_rows || j.total_rows || 0
-    }))
-  });
+  const jobReports = jobs.map((j) => ({
+    name: `job-${j.id}`,
+    created_at: j.started_at || j.created_at,
+    mode: "full_raw",
+    tenant_name: "AMS Main Yard",
+    status: j.status,
+    inserted: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    warnings: 0,
+    tables: j.current_sheet || "",
+    source_file: j.source_file || "",
+    row_count: j.processed_rows || j.total_rows || 0
+  }));
+  res.json({ reports: [...fileReports, ...jobReports] });
+});
+
+xeroxApi.post(["/import_export/full_raw_import_history", "/import-export/history"], (req, res) => {
+  const action = String(req.body?.action || "");
+  if (action === "delete_all") {
+    const removed = deleteImportReports("all");
+    return res.json({ ok: true, removed });
+  }
+  const selected = Array.isArray(req.body?.report) ? req.body.report : [req.body?.name].filter(Boolean);
+  const removed = deleteImportReports(selected.map(String));
+  res.json({ ok: true, removed });
+});
+
+xeroxApi.get("/import_export/full_raw_import_history/:name", (req, res) => {
+  const file = importReportFile(req.params.name);
+  if (!file) return res.status(404).json({ error: "Report not found" });
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${path.basename(file)}"`);
+  res.send(fs.readFileSync(file, "utf8"));
 });
 
 xeroxApi.get("/delivery-rents", (req, res) => {

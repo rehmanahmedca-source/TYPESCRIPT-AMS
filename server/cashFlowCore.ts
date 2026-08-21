@@ -1,6 +1,7 @@
 import { all, one, run } from "./db.ts";
 import { money, pkDate, pkNow, toMinor, ymd } from "./money.ts";
 import { accountNet, refreshAccountBalance, type AnyRow } from "./services.ts";
+import { freshStartCutoff, todayOpeningOverride } from "./opsExtras.ts";
 
 export const CF_DIR_IN = "in";
 export const CF_DIR_OUT = "out";
@@ -455,7 +456,7 @@ function isMirrorTx(tx: AnyRow) {
   return MIRROR_MARKERS.some((m) => note.includes(m));
 }
 
-export function collectCashFlowRows(fromDate: string, toDate: string, includeVoided = true) {
+export function collectCashFlowRows(fromDate: string, toDate: string, includeVoided = true, postedAfter?: string | null) {
   const rows: AnyRow[] = [];
   const accounts = all<AnyRow>("SELECT * FROM account");
   const byId: Record<number, AnyRow> = {};
@@ -470,6 +471,10 @@ export function collectCashFlowRows(fromDate: string, toDate: string, includeVoi
   let recSql = `SELECT * FROM cash_flow_entry WHERE date(date_posted) >= date(?) AND date(date_posted) <= date(?)`;
   const recParams: unknown[] = [fromDate, toDate];
   if (!includeVoided) recSql += " AND (is_void = 0 OR is_void IS NULL)";
+  if (postedAfter) {
+    recSql += " AND datetime(date_posted) > datetime(?)";
+    recParams.push(postedAfter);
+  }
   for (const e of all<AnyRow>(recSql, recParams)) {
     const acc = byId[Number(e.account_id)];
     const dest = byId[Number(e.destination_account_id)];
@@ -731,12 +736,14 @@ export function buildCashFlowPayload(query: AnyRow) {
   const fromDate = String(query.from_date || today);
   const toDate = String(query.to_date || today);
   const includeVoided = String(query.status || "active") !== "active";
-  let rows = collectCashFlowRows(fromDate, toDate, true);
+  const override = todayOpeningOverride();
+  const cutoff = fromDate === today ? freshStartCutoff() : null;
+  let rows = collectCashFlowRows(fromDate, toDate, true, cutoff);
   rows = filterCashFlowRows(rows, query);
   if (!includeVoided && String(query.status || "active") === "active") {
     rows = rows.filter((r) => r.status === "active");
   }
-  const opening = cashFlowOpening(fromDate);
+  const opening = fromDate === today ? (override != null ? override : 0) : cashFlowOpening(fromDate);
   const closing = applyRunningBalance(rows, opening, Number(query.account_id || 0) || undefined);
   const sums = summarizeCashFlow(rows);
   const accounts = companyAccounts(true);
@@ -765,6 +772,9 @@ export function buildCashFlowPayload(query: AnyRow) {
     from_date: fromDate,
     to_date: toDate,
     today_str: today,
+    today_opening_override: override,
+    is_fresh_start_view: fromDate === today,
+    fresh_start_date: today,
     yesterday_str: yesterday.toISOString().slice(0, 10),
     this_week_str: week.toISOString().slice(0, 10),
     this_month_str: month,

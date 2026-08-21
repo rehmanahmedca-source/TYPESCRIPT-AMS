@@ -156,6 +156,7 @@ export default function App() {
         <Route path="/ledger" element={<Clients />} />
         <Route path="/clients/:id" element={<ClientLedger />} />
         <Route path="/ledger/:id" element={<ClientLedger />} />
+        <Route path="/client_ledger/:id" element={<ClientLedger />} />
         <Route path="/suppliers" element={<Suppliers />} />
         <Route path="/suppliers/:id" element={<SupplierLedger />} />
 

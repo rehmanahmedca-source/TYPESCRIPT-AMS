@@ -19,6 +19,7 @@ import {
   type AnyRow
 } from "./services.ts";
 import { buildFullRawWorkbook, buildMasterWorkbook, importWorkbook, sendWorkbook, xlsxFilename } from "./xlsx.ts";
+import { writeImportReport } from "./opsExtras.ts";
 import { applyBookingCancel, buildClientLedger, revertCancel } from "./clientLedger.ts";
 import { clientBookingStatus, clientFinancialSummary, createDirectSale, saleListExtras } from "./salesCore.ts";
 import {
@@ -875,6 +876,11 @@ api.get("/clients", (_req, res) => {
   res.json({ clients, totalReceivables });
 });
 
+api.post(["/clients/activate_all", "/clients/activate-all"], (_req, res) => {
+  run("UPDATE client SET is_active = 1 WHERE is_active = 0");
+  res.json({ ok: true });
+});
+
 api.post("/clients", (req, res) => {
   const b = req.body || {};
   if (!b.name) return res.status(400).json({ error: "Client name is required" });
@@ -1273,9 +1279,16 @@ api.get("/grn", (_req, res) => {
 
 api.post("/grn", (req, res) => {
   const b = req.body || {};
-  const supplier = b.supplier_id
+  let supplier = b.supplier_id
     ? one<AnyRow>("SELECT * FROM supplier WHERE id = ?", [b.supplier_id])
     : one<AnyRow>("SELECT * FROM supplier WHERE name = ? COLLATE NOCASE", [b.supplier]);
+  if (!supplier && String(b.supplier || "").trim()) {
+    const created = run(
+      "INSERT INTO supplier (name, is_active, created_at) VALUES (?, 1, ?)",
+      [String(b.supplier).trim(), pkNow()]
+    );
+    supplier = one<AnyRow>("SELECT * FROM supplier WHERE id = ?", [Number(created.lastInsertRowid)]);
+  }
   const items: { name: string; qty: number; rate: number }[] = Array.isArray(b.items)
     ? b.items
     : [{ name: b.material_name || b.mat_name, qty: Number(b.quantity || b.qty || 0), rate: Number(b.purchaseRate || b.rate || 0) }];
@@ -1285,8 +1298,13 @@ api.post("/grn", (req, res) => {
     const auto = nextAutoBill(db, "GRN");
     const manual = normalizeManualBill(b.manual_bill_no);
     const info = run(
-      `INSERT INTO grn (supplier_id, supplier, manual_bill_no, auto_bill_no, loading_cost, freight_cost, other_expense, discount, paid_amount, payment_type, payment_account_id, date_posted, is_void, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      `INSERT INTO grn (
+        supplier_id, supplier, manual_bill_no, auto_bill_no,
+        loading_cost, freight_cost, other_expense, adjustment_amount, discount, paid_amount,
+        payment_type, payment_account_id, tax_percent, tax_amount, tax_type,
+        bank_name, account_name, account_no, supplier_invoice_no, due_date, bill_date,
+        date_posted, is_void, note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
       [
         supplier?.id || null,
         supplier?.name || b.supplier || null,
@@ -1295,10 +1313,20 @@ api.post("/grn", (req, res) => {
         Number(b.loading_cost || 0),
         Number(b.freight_cost || 0),
         Number(b.other_expense || 0),
+        Number(b.adjustment_amount || 0),
         Number(b.discount || 0),
         Number(b.paid_amount || 0),
         b.payment_type || null,
         b.payment_account_id || null,
+        Number(b.tax_percent || 0),
+        Number(b.tax_amount || 0),
+        b.tax_type || null,
+        b.bank_name || null,
+        b.account_name || null,
+        b.account_no || null,
+        b.supplier_invoice_no || null,
+        b.due_date || null,
+        b.bill_date || null,
         b.date || pkNow(),
         b.note || b.vehicleNo || null
       ]
@@ -1364,17 +1392,35 @@ api.post("/grn/:id", (req, res) => {
   const total = money(itemTotal + loading + freight + other - discount);
   tx(() => {
     run("UPDATE entry SET is_void = 1 WHERE source_table = 'grn' AND source_id = ?", [grn.id]);
-    run("UPDATE grn SET manual_bill_no=?, paid_amount=?, discount=?, loading_cost=?, freight_cost=?, other_expense=?, note=?, updated_at=? WHERE id=?", [
-      b.manual_bill_no || grn.manual_bill_no,
-      Number(b.paid_amount ?? grn.paid_amount),
-      discount,
-      loading,
-      freight,
-      other,
-      b.note ?? grn.note,
-      pkNow(),
-      grn.id
-    ]);
+    run(
+      `UPDATE grn SET manual_bill_no=?, paid_amount=?, discount=?, loading_cost=?, freight_cost=?, other_expense=?,
+        adjustment_amount=?, tax_percent=?, tax_amount=?, tax_type=?, bank_name=?, account_name=?, account_no=?,
+        supplier_invoice_no=?, due_date=?, bill_date=?, payment_type=?, payment_account_id=?, note=?, updated_at=?
+       WHERE id=?`,
+      [
+        b.manual_bill_no || grn.manual_bill_no,
+        Number(b.paid_amount ?? grn.paid_amount),
+        discount,
+        loading,
+        freight,
+        other,
+        Number(b.adjustment_amount ?? grn.adjustment_amount ?? 0),
+        Number(b.tax_percent ?? grn.tax_percent ?? 0),
+        Number(b.tax_amount ?? grn.tax_amount ?? 0),
+        b.tax_type ?? grn.tax_type,
+        b.bank_name ?? grn.bank_name,
+        b.account_name ?? grn.account_name,
+        b.account_no ?? grn.account_no,
+        b.supplier_invoice_no ?? grn.supplier_invoice_no,
+        b.due_date ?? grn.due_date,
+        b.bill_date ?? grn.bill_date,
+        b.payment_type ?? grn.payment_type,
+        b.payment_account_id ?? grn.payment_account_id,
+        b.note ?? grn.note,
+        pkNow(),
+        grn.id
+      ]
+    );
     run("DELETE FROM grn_item WHERE grn_id = ?", [grn.id]);
     for (const item of items) {
       if (item.name && Number(item.qty) > 0) {
@@ -1950,7 +1996,15 @@ api.get("/dispatch", (_req, res) => {
   ).map((s) => ({ ...s, items: all("SELECT * FROM direct_sale_item WHERE sale_id = ?", [s.id]) }));
   const entries = all("SELECT * FROM entry WHERE is_void = 0 AND type = 'OUT' ORDER BY id DESC LIMIT 150");
   const drivers = all("SELECT * FROM delivery_person WHERE is_active = 1 ORDER BY name");
-  res.json({ sales, entries, drivers });
+  res.json({
+    sales,
+    entries,
+    drivers,
+    delivery_persons: drivers,
+    clients: all("SELECT id, code, name FROM client WHERE is_active = 1 ORDER BY name"),
+    materials: all("SELECT id, code, name, unit_price, unit FROM material WHERE is_active = 1 ORDER BY name"),
+    today: pkDate()
+  });
 });
 
 api.get("/delivery-rents", (_req, res) => {
@@ -2443,15 +2497,24 @@ api.post("/import", upload.single("file"), async (req, res) => {
     const inserted = table_results.reduce((a, r) => a + r.inserted, 0);
     const updated = table_results.reduce((a, r) => a + r.updated, 0);
     const failed = table_results.reduce((a, r) => a + r.failed, 0);
+    const skipped = table_results.reduce((a, r) => a + Number(r.skipped || 0), 0);
+    const report = writeImportReport({
+      mode,
+      source_file: req.file.originalname || "upload.xlsx",
+      table_results
+    });
     res.json({
       ok: failed === 0,
       inserted,
       updated,
       failed,
+      skipped,
       table_results,
+      report_name: report.name,
       headline: `Inserted ${inserted}, updated ${updated}, failed ${failed}`
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
   }
 });
+

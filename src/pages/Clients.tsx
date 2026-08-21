@@ -129,6 +129,9 @@ export default function Clients() {
   return (
     <div>
       <PageHeader icon="bi-people" title="Clients & Ledgers" subtitle="Manage clients, track balances, record payments">
+        <button className="btn btn-outline-success btn-pill fw-bold" onClick={async () => { if (!confirm("Activate all suspended clients?")) return; await api("/clients/activate_all", { method: "POST" }); reload(); }}>
+          <i className="bi bi-play-circle me-1" /> Activate All
+        </button>
         <button className="btn btn-warning btn-pill fw-bold" onClick={() => setShowAdd(true)}>
           <i className="bi bi-plus-circle me-1" /> New Client
         </button>

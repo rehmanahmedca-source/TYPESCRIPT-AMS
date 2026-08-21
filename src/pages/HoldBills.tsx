@@ -25,7 +25,10 @@ export default function HoldBills() {
                 <td>{d.total_qty}</td>
                 <td className="text-end">{money(d.total_amount)}</td>
                 <td>{d.created_by}</td>
-                <td><button className="btn btn-sm btn-outline-danger" onClick={async () => { await api(`/direct_sales/hold/${d.id}/delete`, { method: "POST" }); reload(); }}>Delete</button></td>
+                <td className="text-nowrap">
+                  <Link to={`/direct_sales?resume=${d.id}`} className="btn btn-sm btn-outline-warning me-1">Resume</Link>
+                  <button className="btn btn-sm btn-outline-danger" onClick={async () => { await api(`/direct_sales/hold/${d.id}/delete`, { method: "POST" }); reload(); }}>Delete</button>
+                </td>
               </tr>
             ))}
             {!data?.drafts?.length && <tr><td colSpan={9} className="ui-empty">No held bills.</td></tr>}

@@ -77,8 +77,12 @@ export default function Notifications() {
               <button className="btn btn-warning text-dark btn-sm">Add</button>
             </form>
             {(data?.staff_emails || []).map((e) => (
-              <div key={e.id} className="d-flex justify-content-between mb-2">
-                <small>{e.email}</small>
+              <div key={e.id} className="d-flex justify-content-between align-items-center mb-2">
+                <small className={e.is_active ? "" : "text-muted text-decoration-line-through"}>{e.email}</small>
+                <span className="d-flex gap-1">
+                  <button className="btn btn-xs btn-outline-secondary" onClick={async () => { await api(`/notifications/toggle_email/${e.id}`, { method: "POST" }); reload(); }}>{e.is_active ? "Off" : "On"}</button>
+                  <button className="btn btn-xs btn-outline-danger" onClick={async () => { await api(`/notifications/delete_email/${e.id}`, { method: "POST" }); reload(); }}>×</button>
+                </span>
               </div>
             ))}
             {!(data?.staff_emails || []).length && <small className="text-muted">No email addresses added.</small>}

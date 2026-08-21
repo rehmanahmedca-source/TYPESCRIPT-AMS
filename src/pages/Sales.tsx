@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageHeader, Modal, Combobox } from "../components/ui";
 import { api } from "../api";
 import { money, ymd } from "../format";
@@ -42,6 +42,7 @@ function saleStatus(s: Sale) {
 }
 
 export default function Sales() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data, reload, error } = useApi<{
     sales: Sale[];
     clients: { id: number; name: string; code: string }[];
@@ -109,6 +110,38 @@ export default function Sales() {
       setCategory("Booking Delivery");
     }
   }, [sheet]);
+
+  useEffect(() => {
+    const resumeId = searchParams.get("resume");
+    if (!resumeId) return;
+    api<{ payload: Record<string, unknown> }>(`/direct_sales/hold/${resumeId}`).then((d) => {
+      const p = d.payload || {};
+      const payload = (p.payload && typeof p.payload === "object" ? p.payload : p) as Record<string, unknown>;
+      setSheet("Billed");
+      setCategory(String(p.category || payload.category || "Cash"));
+      setClientCode(String(p.client_code || payload.client_code || ""));
+      setManualName(String(p.manual_client_name || payload.manual_client_name || ""));
+      setManualBill(String(p.manual_bill_no || payload.manual_bill_no || ""));
+      const rawLines = (payload.lines || p.items || []) as { name?: string; qty?: string | number; rate?: string | number; alt?: string; grn?: string; ignore?: boolean }[];
+      if (Array.isArray(rawLines) && rawLines.length) {
+        setLines(rawLines.map((l) => ({
+          name: String(l.name || ""),
+          qty: String(l.qty ?? "1"),
+          rate: String(l.rate ?? ""),
+          alt: String(l.alt || ""),
+          grn: String(l.grn || ""),
+          ignore: Boolean(l.ignore)
+        })));
+      }
+      const rawDels = (payload.dels || []) as { id?: string; bags?: string; rent?: string }[];
+      if (Array.isArray(rawDels) && rawDels.length) setDels(rawDels.map((x) => ({ id: String(x.id || ""), bags: String(x.bags || ""), rent: String(x.rent || "") })));
+      if (payload.paid != null) setPaid(String(payload.paid));
+      if (payload.discount != null) setDiscount(String(payload.discount));
+      const next = new URLSearchParams(searchParams);
+      next.delete("resume");
+      setSearchParams(next, { replace: true });
+    }).catch(() => undefined);
+  }, [searchParams, setSearchParams]);
 
   const balMap = useMemo(() => {
     const m: Record<string, BookingRow> = {};

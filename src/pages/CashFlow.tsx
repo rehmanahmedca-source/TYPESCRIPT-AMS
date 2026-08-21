@@ -21,6 +21,7 @@ type Payload = {
   generated_at: string; default_movement_datetime: string; rows: Row[];
   opening_balance: number; closing_balance: number; adjusted_closing_balance: number;
   physical_cash_available: number | null; reconciliation_reason: string; adjustment_date_input: string; show_delete_button: boolean;
+  today_opening_override: number | null; is_fresh_start_view: boolean;
   cash_accounts: Acc[]; cash_accounts_list: Acc[]; bank_accounts_list: Acc[]; cash_total: number; bank_total: number;
   account_activity: Record<number, { in: number; out: number }>;
   cf_categories: Cat[]; cf_subcategories: Sub[]; cf_parties: Party[]; cf_parties_all: Party[];
@@ -75,6 +76,7 @@ export default function CashFlow() {
   const [quickCat, setQuickCat] = useState(false);
   const [quickSub, setQuickSub] = useState(false);
   const [quickParty, setQuickParty] = useState(false);
+  const [openingOverride, setOpeningOverride] = useState("");
 
   async function load(f = filters) {
     setErr("");
@@ -85,6 +87,7 @@ export default function CashFlow() {
       if (!posted) setPosted(d.default_movement_datetime);
       if (d.physical_cash_available != null) setPhysical(String(d.physical_cash_available));
       setReconReason(d.reconciliation_reason || "");
+      setOpeningOverride(d.today_opening_override != null ? String(d.today_opening_override) : "");
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -283,6 +286,16 @@ export default function CashFlow() {
             <div className="ui-tile" style={{ borderLeft: "4px solid #f97316" }}><div className="ui-tile-label">Physical Cash</div><div className="ui-tile-value">{data?.physical_cash_available != null ? money(data.physical_cash_available) : "—"}</div><div className="ui-tile-sub">Reconciliation for {data?.adjustment_date_input}</div></div>
             <div className="ui-tile" style={{ borderLeft: "4px solid #0f766e" }}><div className="ui-tile-label">Next Day Opening</div><div className="ui-tile-value">{money(data?.adjusted_closing_balance)}</div><div className="ui-tile-sub">Carry-forward to next period</div></div>
           </div>
+          {data?.is_fresh_start_view && (
+            <Card title="Today opening override (display only — source accounts are not changed)">
+              <form className="row g-2 align-items-end" onSubmit={(e) => { e.preventDefault(); doAction("set_opening_override", { today_opening_override: openingOverride }); }}>
+                <div className="col-md-3"><label className="ui-label">Today opening override</label><input type="number" step="0.01" className="form-control" value={openingOverride} onChange={(e) => setOpeningOverride(e.target.value)} /></div>
+                <div className="col-auto"><button className="btn btn-outline-warning fw-bold" type="submit">Set override</button></div>
+                <div className="col-auto"><button type="button" className="btn btn-outline-secondary" onClick={() => doAction("clear_opening_override")}>Clear</button></div>
+                <div className="col-auto"><button type="button" className="btn btn-outline-danger" onClick={() => doAction("reset_fresh_start")}>Reset fresh start</button></div>
+              </form>
+            </Card>
+          )}
           <div className="row g-3">
             {([
               ["Breakdown by category", data?.breakdown_cat],
