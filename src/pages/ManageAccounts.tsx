@@ -79,6 +79,7 @@ export default function ManageAccounts() {
                 <td className="text-end">{rs(a.live_balance ?? a.balance)}</td>
                 <td>{a.is_active === 0 ? <span className="badge bg-secondary">Inactive</span> : <span className="badge bg-success">Active</span>}</td>
                 <td className="text-end">
+                  <Link className="btn btn-sm btn-outline-success me-1" to={`/accounts/${a.id}/reconcile`}>Reconcile</Link>
                   <button className="btn btn-sm btn-outline-warning me-1" onClick={() => setEdit(a)}>Edit</button>
                   <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => toggle(a.id)}>Toggle</button>
                   <button className="btn btn-sm btn-outline-danger" onClick={() => remove(a.id)}>Delete</button>

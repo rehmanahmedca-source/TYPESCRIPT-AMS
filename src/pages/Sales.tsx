@@ -275,6 +275,8 @@ export default function Sales() {
           <Link to="/" className="btn btn-outline-light btn-sm fw-bold">
             <i className="bi bi-arrow-left me-1" /> Back
           </Link>
+          <Link to="/direct_sales/hold" className="btn btn-outline-info btn-sm fw-bold">Hold Bills</Link>
+          <Link to="/mixed_transactions" className="btn btn-outline-secondary btn-sm fw-bold">Mixed Report</Link>
           <button className="btn btn-warning btn-sm text-dark fw-bold" onClick={() => openSheet("Billed")}>
             <i className="bi bi-plus-lg" /> Add Sale
           </button>
@@ -399,6 +401,9 @@ export default function Sales() {
                     <td className="text-end pe-4">
                       {!s.is_void && (
                         <>
+                          <Link to={`/view_bill/${encodeURIComponent(s.manual_bill_no || s.auto_bill_no)}`} className="btn btn-outline-info btn-sm rounded-pill me-1" title="View">
+                            <i className="bi bi-eye" />
+                          </Link>
                           <button className="btn btn-outline-warning btn-sm rounded-pill me-1" onClick={() => startEdit(s)} title="Edit">
                             <i className="bi bi-pencil" />
                           </button>
@@ -425,6 +430,10 @@ export default function Sales() {
         footer={
           <div className="d-flex gap-2 w-100">
             <button className="btn btn-outline-secondary flex-grow-1 py-2 rounded-pill fw-bold" type="button" onClick={resetSheet}>Reset</button>
+            <button className="btn btn-outline-info flex-grow-1 py-2 rounded-pill fw-bold" type="button" onClick={async () => {
+              await api("/direct_sales/hold", { method: "POST", body: JSON.stringify({ client_code: clientCode, client_name: clients.find((c) => c.code === clientCode)?.name, category, manual_bill_no: manualBill, items: lines, payload: { lines, dels, paid, discount } }) });
+              setSheet(null); resetSheet();
+            }}>Hold Bill</button>
             <button className="btn btn-warning text-dark fw-bold flex-grow-1 py-2 rounded-pill" type="submit" form="saleSheetForm">Save Sale</button>
           </div>
         }

@@ -53,6 +53,14 @@ import LiveLogins from "./pages/LiveLogins";
 import SystemReport from "./pages/SystemReport";
 import AdminDashboard from "./pages/AdminDashboard";
 import Reconciliations from "./pages/Reconciliations";
+import ViewBill from "./pages/ViewBill";
+import ReconcileAccount from "./pages/ReconcileAccount";
+import DataLab from "./pages/DataLab";
+import DataLabBasket from "./pages/DataLabBasket";
+import HoldBills from "./pages/HoldBills";
+import MixedReport from "./pages/MixedReport";
+import ImportHistory from "./pages/ImportHistory";
+import CashFlowDiffDetail from "./pages/CashFlowDiffDetail";
 
 type Boot = {
   today?: string;
@@ -138,6 +146,7 @@ export default function App() {
         <Route path="/materials" element={<Materials />} />
         <Route path="/materials/:id/ledger" element={<MaterialLedger />} />
         <Route path="/grn" element={<Grn />} />
+        <Route path="/edit_grn/:id" element={<Grn />} />
         <Route path="/daily" element={<Daily />} />
         <Route path="/inventory/daily_transactions" element={<Daily />} />
         <Route path="/financial-details" element={<FinancialDetails />} />
@@ -152,6 +161,8 @@ export default function App() {
 
         <Route path="/sales" element={<Sales />} />
         <Route path="/direct_sales" element={<Sales />} />
+        <Route path="/direct_sales/hold" element={<HoldBills />} />
+        <Route path="/mixed_transactions" element={<MixedReport />} />
         <Route path="/bookings" element={<Bookings />} />
         <Route path="/returns" element={<Returns />} />
         <Route path="/material_returns" element={<Returns />} />
@@ -182,12 +193,20 @@ export default function App() {
         <Route path="/accounts/reconciliations" element={<Reconciliations />} />
         <Route path="/accounts/:id/ledger" element={<AccountLedger />} />
         <Route path="/accounts/ledger/:id" element={<AccountLedger />} />
+        <Route path="/accounts/:id/reconcile" element={<ReconcileAccount />} />
         <Route path="/accounts/kpi/:kind" element={<KpiDrilldown />} />
 
         <Route path="/cash-flow" element={<CashFlow />} />
         <Route path="/cash_flow" element={<CashFlow />} />
         <Route path="/cash-flow-differences" element={<CashFlowDifferences />} />
         <Route path="/cash_flow_differences" element={<CashFlowDifferences />} />
+        <Route path="/cash_flow_differences/:id" element={<CashFlowDiffDetail />} />
+        <Route path="/cash-flow-differences/:id" element={<CashFlowDiffDetail />} />
+        <Route path="/view_bill/:billNo" element={<ViewBill />} />
+        <Route path="/view_bill_detail/:type/:id" element={<ViewBill />} />
+        <Route path="/data_lab" element={<DataLab />} />
+        <Route path="/data_lab/" element={<DataLab />} />
+        <Route path="/data_lab/basket" element={<DataLabBasket />} />
         <Route path="/reconciliation" element={<Reconciliation />} />
 
         <Route path="/tracking" element={<History />} />
@@ -203,11 +222,14 @@ export default function App() {
         <Route path="/profit_reports" element={<ProfitReports />} />
         <Route path="/import-export" element={<ImportExport />} />
         <Route path="/import_export" element={<ImportExport />} />
+        <Route path="/import_export/full_raw_import_history" element={<ImportHistory />} />
         <Route path="/void-audit" element={<VoidAudit />} />
         <Route path="/void_audit" element={<VoidAudit />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/activity_log" element={<ActivityLog />} />
         <Route path="/login_sessions" element={<LiveLogins />} />
+        <Route path="/settings/activity" element={<ActivityLog />} />
+        <Route path="/settings/sessions" element={<LiveLogins />} />
         <Route path="/system_report" element={<SystemReport />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/" element={<AdminDashboard />} />

@@ -222,8 +222,11 @@ export default function Accounts() {
                         <span className={`acc-balance ${bal < 0 ? "neg" : ""}`}>{rs(bal)}</span>
                       </td>
                       <td className="text-end">
-                        <Link className="btn btn-sm btn-outline-primary" to={`/accounts/${a.id}/ledger`}>
+                        <Link className="btn btn-sm btn-outline-primary me-1" to={`/accounts/${a.id}/ledger`}>
                           <i className="bi bi-journal-text me-1" />Ledger
+                        </Link>
+                        <Link className="btn btn-sm btn-outline-success" to={`/accounts/${a.id}/reconcile`}>
+                          Reconcile
                         </Link>
                       </td>
                     </tr>

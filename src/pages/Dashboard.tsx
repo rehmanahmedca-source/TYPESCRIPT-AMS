@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { money, num } from "../format";
+import { Modal } from "../components/ui";
+import { money, num, ymd } from "../format";
 import { useApi } from "../useApi";
 
 type StockRow = {
@@ -57,6 +59,8 @@ const quickActions = [
 
 export default function Dashboard() {
   const { data } = useApi<Dash>("/dashboard");
+  const due = useApi<{ id: number; remind_at: string; note: string; client: string; bill_no: string }[]>("/notifications/due");
+  const [hideDue, setHideDue] = useState(false);
   const d = data || ({} as Dash);
   const stock = d.stock || [];
   const date = new Intl.DateTimeFormat("en-US", {
@@ -64,9 +68,21 @@ export default function Dashboard() {
     day: "numeric",
     year: "numeric"
   }).format(new Date());
+  const dueItems = due.data || [];
 
   return (
     <div className="system-dashboard">
+      <Modal open={!hideDue && dueItems.length > 0} title="Deadline Reminder" onClose={() => setHideDue(true)} footer={<Link to="/notifications/upcoming" className="btn btn-warning" onClick={() => setHideDue(true)}>Open reminders</Link>}>
+        <p className="mb-3">These follow-ups are due now.</p>
+        <ul className="list-unstyled mb-0">
+          {dueItems.map((item) => (
+            <li key={item.id} className="mb-2 pb-2 border-bottom">
+              <div className="fw-bold">{item.client || "Client"} {item.bill_no ? `· ${item.bill_no}` : ""}</div>
+              <div className="small text-muted">{ymd(item.remind_at)} — {item.note || "Follow up"}</div>
+            </li>
+          ))}
+        </ul>
+      </Modal>
       <section className="dash-heading">
         <div>
           <h1><i className="bi bi-speedometer2" /> System Dashboard</h1>

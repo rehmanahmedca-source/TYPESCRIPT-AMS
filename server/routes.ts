@@ -1262,7 +1262,13 @@ api.get("/grn", (_req, res) => {
     const itemTotal = items.reduce((a, i) => a + Number(i.qty || 0) * Number(i.price_at_time || 0), 0);
     return { ...g, items, itemTotal };
   });
-  res.json({ grns: rows, suppliers: all("SELECT * FROM supplier WHERE is_active = 1 ORDER BY name") });
+  res.json({
+    grns: rows,
+    suppliers: all("SELECT * FROM supplier WHERE is_active = 1 ORDER BY name"),
+    materials: all("SELECT id, code, name, unit_price, unit FROM material WHERE is_active = 1 ORDER BY name"),
+    accounts: all("SELECT id, name, category, bank_name, account_holder_name, account_number FROM account WHERE is_active = 1 ORDER BY name"),
+    today: pkDate()
+  });
 });
 
 api.post("/grn", (req, res) => {

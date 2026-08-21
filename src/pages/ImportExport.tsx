@@ -44,6 +44,7 @@ export default function ImportExport() {
               <button className="btn btn-outline-secondary" onClick={() => downloadUrl("/export/template")}>
                 Blank template
               </button>
+              <a className="btn btn-outline-info" href="/import_export/full_raw_import_history">Full raw import history</a>
             </div>
             <div className="small text-muted mt-3">
               Master sheets: Clients, Materials, Sales, SaleItems, Bookings, Payments, GRN, Dispatch, DeliveryPersons, Users, Accounts…
