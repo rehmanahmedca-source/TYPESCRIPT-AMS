@@ -3,6 +3,16 @@ export function money(val: unknown): string {
   return "Rs. " + num.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
+export function money2(val: unknown): string {
+  const n = Number(val) || 0;
+  return "Rs. " + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export function rs(val: unknown): string {
+  const n = Number(val) || 0;
+  return "Rs. " + n.toFixed(2);
+}
+
 export function num(val: unknown): string {
   const n = Number(val) || 0;
   return n.toLocaleString("en-US");

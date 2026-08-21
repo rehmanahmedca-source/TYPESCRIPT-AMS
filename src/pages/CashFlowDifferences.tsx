@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { FormEvent, useState } from "react";
+import { Link } from "react-router-dom";
 import { PageHeader, Card } from "../components/ui";
 import { money, ymd } from "../format";
 import { useApi } from "../useApi";
 import { api } from "../api";
-import { FormEvent } from "react";
 
 export default function CashFlowDifferences() {
   const { data, reload } = useApi<{
@@ -61,7 +61,7 @@ export default function CashFlowDifferences() {
 
       <Card title={`Difference History — ${diffs.length} adjustments`} flush>
         <table className="ui-table mb-0">
-          <thead><tr><th>Date</th><th className="text-end">Physical Cash</th><th className="text-end">Calculated</th><th className="text-end">Difference</th><th>Reason</th><th>By</th></tr></thead>
+          <thead><tr><th>Date</th><th className="text-end">Physical Cash</th><th className="text-end">Calculated</th><th className="text-end">Difference</th><th>Reason</th><th>By</th><th /></tr></thead>
           <tbody>
             {diffs.map((d) => (
               <tr key={d.id}>
@@ -75,6 +75,7 @@ export default function CashFlowDifferences() {
                 </td>
                 <td>{d.reason || "—"}</td>
                 <td><small className="text-muted">{d.created_by || "—"}</small></td>
+                <td><Link className="btn btn-sm btn-outline-secondary" to={`/cash_flow_differences/${d.id}`}>Detail</Link></td>
               </tr>
             ))}
           </tbody>

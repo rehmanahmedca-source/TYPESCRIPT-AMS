@@ -21,6 +21,7 @@ export default function AccountLedger() {
     <div>
       <PageHeader icon="bi-journal-check" title={`Account Ledger: ${acc?.name || ""}`} subtitle={`${acc?.category || ""} · ${acc?.account_type || ""}`}>
         <Link to="/accounts" className="btn btn-outline-secondary btn-pill">← Back to Accounts</Link>
+        <Link to={`/accounts/${id}/reconcile`} className="btn btn-outline-success btn-pill"><i className="bi bi-check2-square me-1" /> Reconcile</Link>
       </PageHeader>
       <div className="ui-kpi-grid mb-4">
         <div className="ui-tile border-indigo"><div className="ui-tile-label">Opening Balance</div><div className="ui-tile-value">{money(data?.opening)}</div></div>

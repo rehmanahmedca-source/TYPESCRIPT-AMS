@@ -3,9 +3,9 @@ import { api } from "../api";
 
 function savedUsername() {
   try {
-    return localStorage.getItem("ams_remembered_username") || "Rehman Ahmed";
+    return localStorage.getItem("ams_remembered_username") || "";
   } catch {
-    return "Rehman Ahmed";
+    return "";
   }
 }
 
@@ -21,12 +21,12 @@ function loggedOutNotice() {
 
 export default function Login({ onLogin }: { onLogin: (user: Record<string, unknown>) => void }) {
   const [username, setUsername] = useState(savedUsername);
-  const [password, setPassword] = useState("Admin@fbm12345");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(() => {
-    try { return localStorage.getItem("ams_remember_me") !== "false"; } catch { return true; }
+    try { return localStorage.getItem("ams_remember_me") === "true"; } catch { return false; }
   });
   const [notice] = useState(loggedOutNotice);
   const [theme, setTheme] = useState(() => document.documentElement.getAttribute("data-theme") || "light");
@@ -86,9 +86,9 @@ export default function Login({ onLogin }: { onLogin: (user: Record<string, unkn
           <p>FOR EASE ACCESS</p>
         </header>
 
-        {notice && !error && (
+        {(notice || !error) && (
           <div className="ams-login-alert" role="status">
-            You have been logged out.
+            {notice ? "You have been logged out." : "Please log in to access this page."}
           </div>
         )}
         {error && (
@@ -107,6 +107,7 @@ export default function Login({ onLogin }: { onLogin: (user: Record<string, unkn
                 name="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter username"
                 autoComplete="username"
                 autoFocus
                 required
@@ -124,6 +125,7 @@ export default function Login({ onLogin }: { onLogin: (user: Record<string, unkn
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 type={showPassword ? "text" : "password"}
+                placeholder="Enter password"
                 autoComplete="current-password"
                 required
               />

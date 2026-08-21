@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageHeader, Modal, Combobox } from "../components/ui";
 import { api } from "../api";
 import { money, ymd } from "../format";
@@ -42,6 +42,7 @@ function saleStatus(s: Sale) {
 }
 
 export default function Sales() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data, reload, error } = useApi<{
     sales: Sale[];
     clients: { id: number; name: string; code: string }[];
@@ -109,6 +110,38 @@ export default function Sales() {
       setCategory("Booking Delivery");
     }
   }, [sheet]);
+
+  useEffect(() => {
+    const resumeId = searchParams.get("resume");
+    if (!resumeId) return;
+    api<{ payload: Record<string, unknown> }>(`/direct_sales/hold/${resumeId}`).then((d) => {
+      const p = d.payload || {};
+      const payload = (p.payload && typeof p.payload === "object" ? p.payload : p) as Record<string, unknown>;
+      setSheet("Billed");
+      setCategory(String(p.category || payload.category || "Cash"));
+      setClientCode(String(p.client_code || payload.client_code || ""));
+      setManualName(String(p.manual_client_name || payload.manual_client_name || ""));
+      setManualBill(String(p.manual_bill_no || payload.manual_bill_no || ""));
+      const rawLines = (payload.lines || p.items || []) as { name?: string; qty?: string | number; rate?: string | number; alt?: string; grn?: string; ignore?: boolean }[];
+      if (Array.isArray(rawLines) && rawLines.length) {
+        setLines(rawLines.map((l) => ({
+          name: String(l.name || ""),
+          qty: String(l.qty ?? "1"),
+          rate: String(l.rate ?? ""),
+          alt: String(l.alt || ""),
+          grn: String(l.grn || ""),
+          ignore: Boolean(l.ignore)
+        })));
+      }
+      const rawDels = (payload.dels || []) as { id?: string; bags?: string; rent?: string }[];
+      if (Array.isArray(rawDels) && rawDels.length) setDels(rawDels.map((x) => ({ id: String(x.id || ""), bags: String(x.bags || ""), rent: String(x.rent || "") })));
+      if (payload.paid != null) setPaid(String(payload.paid));
+      if (payload.discount != null) setDiscount(String(payload.discount));
+      const next = new URLSearchParams(searchParams);
+      next.delete("resume");
+      setSearchParams(next, { replace: true });
+    }).catch(() => undefined);
+  }, [searchParams, setSearchParams]);
 
   const balMap = useMemo(() => {
     const m: Record<string, BookingRow> = {};
@@ -275,6 +308,8 @@ export default function Sales() {
           <Link to="/" className="btn btn-outline-light btn-sm fw-bold">
             <i className="bi bi-arrow-left me-1" /> Back
           </Link>
+          <Link to="/direct_sales/hold" className="btn btn-outline-info btn-sm fw-bold">Hold Bills</Link>
+          <Link to="/mixed_transactions" className="btn btn-outline-secondary btn-sm fw-bold">Mixed Report</Link>
           <button className="btn btn-warning btn-sm text-dark fw-bold" onClick={() => openSheet("Billed")}>
             <i className="bi bi-plus-lg" /> Add Sale
           </button>
@@ -399,6 +434,9 @@ export default function Sales() {
                     <td className="text-end pe-4">
                       {!s.is_void && (
                         <>
+                          <Link to={`/view_bill/${encodeURIComponent(s.manual_bill_no || s.auto_bill_no)}`} className="btn btn-outline-info btn-sm rounded-pill me-1" title="View">
+                            <i className="bi bi-eye" />
+                          </Link>
                           <button className="btn btn-outline-warning btn-sm rounded-pill me-1" onClick={() => startEdit(s)} title="Edit">
                             <i className="bi bi-pencil" />
                           </button>
@@ -425,6 +463,10 @@ export default function Sales() {
         footer={
           <div className="d-flex gap-2 w-100">
             <button className="btn btn-outline-secondary flex-grow-1 py-2 rounded-pill fw-bold" type="button" onClick={resetSheet}>Reset</button>
+            <button className="btn btn-outline-info flex-grow-1 py-2 rounded-pill fw-bold" type="button" onClick={async () => {
+              await api("/direct_sales/hold", { method: "POST", body: JSON.stringify({ client_code: clientCode, client_name: clients.find((c) => c.code === clientCode)?.name, category, manual_bill_no: manualBill, items: lines, payload: { lines, dels, paid, discount } }) });
+              setSheet(null); resetSheet();
+            }}>Hold Bill</button>
             <button className="btn btn-warning text-dark fw-bold flex-grow-1 py-2 rounded-pill" type="submit" form="saleSheetForm">Save Sale</button>
           </div>
         }

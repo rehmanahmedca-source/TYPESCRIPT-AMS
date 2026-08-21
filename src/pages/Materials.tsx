@@ -28,6 +28,9 @@ export default function Materials() {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Material | null>(null);
   const [q, setQ] = useState("");
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [unitOpen, setUnitOpen] = useState(false);
 
   const materials = (data?.materials || []).filter(
     (m) =>
@@ -88,9 +91,13 @@ export default function Materials() {
 
   return (
     <div>
-      <PageHeader icon="bi-tags" title="Brand Master" subtitle="Manage materials, brands, rates and categories">
+      <PageHeader icon="bi-tags" title="Material Brands" subtitle="Manage materials, brands, rates and categories">
+        <button className="btn btn-outline-info fw-bold px-4 rounded-pill" onClick={() => setMergeOpen(true)}><i className="bi bi-intersect me-1" /> Merge Brands</button>
+        <button className="btn btn-outline-primary fw-bold px-4 rounded-pill" onClick={() => setRenameOpen(true)}><i className="bi bi-arrow-repeat me-1" /> Fix Old Names</button>
+        <button className="btn btn-outline-warning fw-bold px-4 rounded-pill" onClick={() => setUnitOpen(true)}><i className="bi bi-pencil-square me-1" /> Bulk Units</button>
+        <button className="btn btn-outline-success fw-bold px-4 rounded-pill" onClick={async () => { if (!confirm("Activate all suspended materials?")) return; await api("/materials/activate-all", { method: "POST" }); reload(); }}><i className="bi bi-play-circle me-1" /> Activate All Suspended</button>
         <button className="btn btn-warning btn-pill fw-bold" onClick={() => setShowAdd(true)}>
-          <i className="bi bi-plus-circle me-1" /> New Brand
+          <i className="bi bi-plus-circle me-1" /> Add Brand
         </button>
       </PageHeader>
 
